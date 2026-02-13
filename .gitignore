@@ -1,0 +1,24 @@
+# OpenList Skill - .gitignore
+
+# Configuration files with credentials
+openlist-config.json
+
+# Reference materials (upstream repos)
+reference/
+
+# Test files
+/tmp/openclaw-test.txt
+
+# Backup directories
+backup/
+downloads/
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# macOS
+.DS_Store

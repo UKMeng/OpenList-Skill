@@ -1,5 +1,5 @@
 ---
-name: openlist
+name: OpenList-Skill
 description: Manage files on OpenList servers using their REST API. Use this skill when users want to interact with OpenList file servers for (1) listing directories and files, (2) uploading or downloading files, (3) searching for files, (4) managing storages and folders (create, delete, rename, copy, move), (5) adding offline download tasks (aria2, qBittorrent, cloud services), or (6) querying task status. OpenList is a file list program that supports multiple storage providers including local storage, cloud drives (OneDrive, Google Drive, Aliyun), and network protocols (WebDAV, FTP, SFTP, S3).
 ---
 

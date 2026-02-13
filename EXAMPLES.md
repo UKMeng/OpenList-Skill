@@ -374,6 +374,128 @@ done
 echo "=== End of Report ==="
 ```
 
+## Example 7: Offline Download with Aria2
+
+```bash
+#!/bin/bash
+
+# Add offline download tasks and monitor progress
+
+SERVER_URL=$(jq -r '.server_url' openlist-config.json)
+USERNAME=$(jq -r '.username' openlist-config.json)
+PASSWORD=$(jq -r '.password' openlist-config.json)
+
+# Login
+TOKEN=$(curl -s -X POST "${SERVER_URL}/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d "{\"username\":\"${USERNAME}\",\"password\":\"${PASSWORD}\"}" \
+  | jq -r '.data.token')
+
+echo "=== Available Offline Download Tools ==="
+curl -s -X GET "${SERVER_URL}/api/fs/offline_download/tools" \
+  -H "Authorization: ${TOKEN}" \
+  | jq -r '.data[]'
+
+echo -e "\n=== Adding Offline Download Task ==="
+# Add a download task
+DOWNLOAD_URL="http://example.com/file.zip"
+TARGET_PATH="/downloads"
+TOOL="aria2"
+
+TASK_RESPONSE=$(curl -s -X POST "${SERVER_URL}/api/fs/add_offline_download" \
+  -H "Authorization: ${TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d "{\"urls\":[\"${DOWNLOAD_URL}\"],\"path\":\"${TARGET_PATH}\",\"tool\":\"${TOOL}\",\"delete_policy\":\"delete_on_upload_succeed\"}")
+
+echo "$TASK_RESPONSE" | jq '.'
+
+TASK_ID=$(echo "$TASK_RESPONSE" | jq -r '.data.tasks[0].id')
+
+if [ "$TASK_ID" != "null" ]; then
+  echo -e "\nTask ID: $TASK_ID"
+
+  # Monitor task progress
+  echo -e "\n=== Monitoring Task Progress ==="
+  while true; do
+    TASK_INFO=$(curl -s -X GET "${SERVER_URL}/api/fs/offline_download/info?tid=${TASK_ID}" \
+      -H "Authorization: ${TOKEN}")
+
+    STATE=$(echo "$TASK_INFO" | jq -r '.data.state')
+    PROGRESS=$(echo "$TASK_INFO" | jq -r '.data.progress')
+    STATUS=$(echo "$TASK_INFO" | jq -r '.data.status')
+
+    echo "[$(date '+%H:%M:%S')] State: $STATE | Progress: ${PROGRESS}% | Status: $STATUS"
+
+    # Check if task is done
+    if [ "$STATE" = "succeeded" ] || [ "$STATE" = "failed" ] || [ "$STATE" = "canceled" ]; then
+      echo -e "\nTask finished with state: $STATE"
+      break
+    fi
+
+    sleep 5
+  done
+
+  # Show final task info
+  echo -e "\n=== Final Task Info ==="
+  curl -s -X GET "${SERVER_URL}/api/fs/offline_download/info?tid=${TASK_ID}" \
+    -H "Authorization: ${TOKEN}" \
+    | jq '.data | {name, state, progress, total_bytes, error}'
+fi
+```
+
+## Example 8: Batch Offline Download
+
+```bash
+#!/bin/bash
+
+# Download multiple files using offline download
+
+SERVER_URL=$(jq -r '.server_url' openlist-config.json)
+USERNAME=$(jq -r '.username' openlist-config.json)
+PASSWORD=$(jq -r '.password' openlist-config.json)
+
+# URLs to download (one per line)
+URLS=(
+  "http://example.com/file1.zip"
+  "http://example.com/file2.tar.gz"
+  "magnet:?xt=urn:btih:..."
+)
+
+TARGET_PATH="/batch-downloads"
+TOOL="aria2"
+
+# Login
+TOKEN=$(curl -s -X POST "${SERVER_URL}/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d "{\"username\":\"${USERNAME}\",\"password\":\"${PASSWORD}\"}" \
+  | jq -r '.data.token')
+
+# Create target directory
+curl -s -X POST "${SERVER_URL}/api/fs/mkdir" \
+  -H "Authorization: ${TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d "{\"path\":\"${TARGET_PATH}\"}" > /dev/null
+
+echo "=== Adding ${#URLS[@]} Download Tasks ==="
+
+# Build JSON array of URLs
+URLS_JSON=$(printf '%s\n' "${URLS[@]}" | jq -R . | jq -s .)
+
+# Add all downloads in one request
+RESPONSE=$(curl -s -X POST "${SERVER_URL}/api/fs/add_offline_download" \
+  -H "Authorization: ${TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d "{\"urls\":${URLS_JSON},\"path\":\"${TARGET_PATH}\",\"tool\":\"${TOOL}\"}")
+
+echo "$RESPONSE" | jq '.data.tasks[] | {id, name, state}'
+
+# List all tasks
+echo -e "\n=== All Offline Download Tasks ==="
+curl -s -X GET "${SERVER_URL}/api/fs/offline_download/list?page=1&per_page=50" \
+  -H "Authorization: ${TOKEN}" \
+  | jq '.data.content[] | {id, name, state, progress, error}'
+```
+
 ## Tips for Using These Examples
 
 1. **Save scripts**: Save these examples as `.sh` files and make them executable with `chmod +x`

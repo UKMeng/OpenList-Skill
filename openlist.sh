@@ -221,12 +221,144 @@ delete_remote() {
 # List storages
 list_storages() {
     TOKEN=$(login)
-    
+
     echo -e "${YELLOW}Listing storages...${NC}"
-    
+
     curl -s -X GET "${SERVER_URL}/api/admin/storage/list" \
         -H "Authorization: $TOKEN" \
         | jq '.data.content[] | {id, mount_path, driver, disabled}'
+}
+
+# Get available offline download tools
+get_offline_tools() {
+    TOKEN=$(login)
+
+    echo -e "${YELLOW}Getting available offline download tools...${NC}"
+
+    curl -s -X GET "${SERVER_URL}/api/fs/offline_download/tools" \
+        -H "Authorization: $TOKEN" \
+        | jq '.'
+}
+
+# Add offline download task
+add_offline_download() {
+    local url="$1"
+    local path="$2"
+    local tool="${3:-aria2}"
+    local delete_policy="${4:-delete_on_upload_succeed}"
+
+    if [ -z "$url" ] || [ -z "$path" ]; then
+        echo -e "${RED}Error: URL and path are required${NC}"
+        echo "Usage: $0 offline-download <url> <path> [tool] [delete_policy]"
+        echo "Tools: aria2, qBittorrent, 115 Cloud, PikPak, etc."
+        echo "Delete policy: delete_on_upload_succeed, delete_on_upload_failed, delete_never, delete_always"
+        exit 1
+    fi
+
+    TOKEN=$(login)
+
+    echo -e "${YELLOW}Adding offline download task...${NC}"
+    echo "URL: $url"
+    echo "Path: $path"
+    echo "Tool: $tool"
+    echo "Delete policy: $delete_policy"
+
+    RESPONSE=$(curl -s -X POST "${SERVER_URL}/api/fs/add_offline_download" \
+        -H "Authorization: $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{\"urls\":[\"${url}\"],\"path\":\"${path}\",\"tool\":\"${tool}\",\"delete_policy\":\"${delete_policy}\"}")
+
+    CODE=$(echo "$RESPONSE" | jq -r '.code')
+
+    if [ "$CODE" = "200" ]; then
+        echo -e "${GREEN}Offline download task added successfully!${NC}"
+        echo "$RESPONSE" | jq '.data.tasks'
+    else
+        echo -e "${RED}Failed to add offline download task${NC}"
+        echo "$RESPONSE" | jq '.'
+    fi
+}
+
+# List offline download tasks
+list_offline_tasks() {
+    local page="${1:-1}"
+    local per_page="${2:-10}"
+
+    TOKEN=$(login)
+
+    echo -e "${YELLOW}Listing offline download tasks...${NC}"
+
+    curl -s -X GET "${SERVER_URL}/api/fs/offline_download/list?page=${page}&per_page=${per_page}" \
+        -H "Authorization: $TOKEN" \
+        | jq '.data.content[] | {id, name, state, status, progress, error}'
+}
+
+# Get offline download task info
+get_offline_task() {
+    local task_id="$1"
+
+    if [ -z "$task_id" ]; then
+        echo -e "${RED}Error: Task ID is required${NC}"
+        exit 1
+    fi
+
+    TOKEN=$(login)
+
+    curl -s -X GET "${SERVER_URL}/api/fs/offline_download/info?tid=${task_id}" \
+        -H "Authorization: $TOKEN" \
+        | jq '.'
+}
+
+# Cancel offline download task
+cancel_offline_task() {
+    local task_id="$1"
+
+    if [ -z "$task_id" ]; then
+        echo -e "${RED}Error: Task ID is required${NC}"
+        exit 1
+    fi
+
+    TOKEN=$(login)
+
+    echo -e "${YELLOW}Canceling task: $task_id${NC}"
+
+    RESPONSE=$(curl -s -X POST "${SERVER_URL}/api/fs/offline_download/cancel?tid=${task_id}" \
+        -H "Authorization: $TOKEN")
+
+    CODE=$(echo "$RESPONSE" | jq -r '.code')
+
+    if [ "$CODE" = "200" ]; then
+        echo -e "${GREEN}Task canceled successfully!${NC}"
+    else
+        echo -e "${RED}Failed to cancel task${NC}"
+        echo "$RESPONSE" | jq '.'
+    fi
+}
+
+# Delete offline download task
+delete_offline_task() {
+    local task_id="$1"
+
+    if [ -z "$task_id" ]; then
+        echo -e "${RED}Error: Task ID is required${NC}"
+        exit 1
+    fi
+
+    TOKEN=$(login)
+
+    echo -e "${YELLOW}Deleting task: $task_id${NC}"
+
+    RESPONSE=$(curl -s -X POST "${SERVER_URL}/api/fs/offline_download/delete?tid=${task_id}" \
+        -H "Authorization: $TOKEN")
+
+    CODE=$(echo "$RESPONSE" | jq -r '.code')
+
+    if [ "$CODE" = "200" ]; then
+        echo -e "${GREEN}Task deleted successfully!${NC}"
+    else
+        echo -e "${RED}Failed to delete task${NC}"
+        echo "$RESPONSE" | jq '.'
+    fi
 }
 
 # Show usage
@@ -245,6 +377,14 @@ usage() {
     echo "  delete <name> <parent_dir>     - Delete file/directory"
     echo "  storages                       - List configured storages"
     echo ""
+    echo "Offline Download Commands:"
+    echo "  offline-tools                                    - List available download tools"
+    echo "  offline-download <url> <path> [tool] [policy]   - Add offline download task"
+    echo "  offline-list [page] [per_page]                  - List offline download tasks"
+    echo "  offline-info <task_id>                          - Get task information"
+    echo "  offline-cancel <task_id>                        - Cancel a task"
+    echo "  offline-delete <task_id>                        - Delete a task"
+    echo ""
     echo "Environment variables:"
     echo "  OPENLIST_CONFIG - Path to config file (default: openlist-config.json)"
     echo ""
@@ -254,6 +394,8 @@ usage() {
     echo "  $0 mkdir /test-folder"
     echo "  $0 upload ./file.txt /test-folder/file.txt"
     echo "  $0 delete file.txt /test-folder"
+    echo "  $0 offline-download 'http://example.com/file.zip' /downloads aria2"
+    echo "  $0 offline-list"
 }
 
 # Main
@@ -283,6 +425,24 @@ case "$COMMAND" in
         ;;
     storages)
         list_storages
+        ;;
+    offline-tools)
+        get_offline_tools
+        ;;
+    offline-download)
+        add_offline_download "$2" "$3" "${4:-aria2}" "${5:-delete_on_upload_succeed}"
+        ;;
+    offline-list)
+        list_offline_tasks "${2:-1}" "${3:-10}"
+        ;;
+    offline-info)
+        get_offline_task "$2"
+        ;;
+    offline-cancel)
+        cancel_offline_task "$2"
+        ;;
+    offline-delete)
+        delete_offline_task "$2"
         ;;
     *)
         usage

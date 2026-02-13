@@ -68,6 +68,14 @@ The `reference/` directory contains upstream source code and documentation:
 
 # Get file info
 ./openlist.sh info <path>
+
+# Offline download operations
+./openlist.sh offline-tools                                  # List available tools
+./openlist.sh offline-download <url> <path> [tool] [policy] # Add download task
+./openlist.sh offline-list [page] [per_page]                # List tasks
+./openlist.sh offline-info <task_id>                         # Get task info
+./openlist.sh offline-cancel <task_id>                       # Cancel task
+./openlist.sh offline-delete <task_id>                       # Delete task
 ```
 
 ## Architecture
@@ -144,6 +152,27 @@ The `reference/` directory contains upstream source code and documentation:
 - Copy: POST `/api/fs/copy`
 - Move: POST `/api/fs/move`
 - Upload: PUT `/api/fs/put` (requires base64-encoded File-Path header)
+
+### Offline Download Operations
+- List available tools: GET `/api/fs/offline_download/tools`
+- Add download task: POST `/api/fs/add_offline_download`
+- List tasks: GET `/api/fs/offline_download/list` (with pagination)
+- Get task info: GET `/api/fs/offline_download/info?tid=<task_id>`
+- Cancel task: POST `/api/fs/offline_download/cancel?tid=<task_id>`
+- Delete task: POST `/api/fs/offline_download/delete?tid=<task_id>`
+
+### Supported Download Tools
+- **aria2** - Aria2 download client
+- **qBittorrent** - qBittorrent client
+- **Transmission** - Transmission client
+- **115 Cloud** - 115 cloud offline download
+- **115 Open** - 115 Open platform
+- **123Pan** - 123 Pan cloud service
+- **123 Open** - 123 Open platform
+- **PikPak** - PikPak cloud service
+- **Thunder** - Thunder (Xunlei) download
+- **ThunderX** - Thunder X
+- **ThunderBrowser** - Thunder Browser
 
 ### Admin Operations
 - List storages: GET `/api/admin/storage/list`

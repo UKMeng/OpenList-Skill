@@ -84,6 +84,27 @@ Use the helper script to test:
 .openclaw/skills/openlist/openlist.sh storages
 ```
 
+### Offline Download
+```bash
+# List available download tools
+.openclaw/skills/openlist/openlist.sh offline-tools
+
+# Add offline download task
+.openclaw/skills/openlist/openlist.sh offline-download "http://example.com/file.zip" /downloads aria2
+
+# List offline download tasks
+.openclaw/skills/openlist/openlist.sh offline-list
+
+# Get task information
+.openclaw/skills/openlist/openlist.sh offline-info <task_id>
+
+# Cancel a task
+.openclaw/skills/openlist/openlist.sh offline-cancel <task_id>
+
+# Delete a task
+.openclaw/skills/openlist/openlist.sh offline-delete <task_id>
+```
+
 ## API Operations Supported
 
 - ✅ Authentication (login with JWT)
@@ -97,6 +118,8 @@ Use the helper script to test:
 - ✅ Copy files
 - ✅ Move files
 - ✅ List storage providers
+- ✅ Offline download (Aria2, qBittorrent, cloud services)
+- ✅ Offline download task management
 - ✅ Admin operations (user/storage management)
 
 ## Direct API Access

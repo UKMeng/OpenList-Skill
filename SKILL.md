@@ -207,6 +207,86 @@ curl -X POST "${SERVER_URL}/api/admin/storage/create" \
   }'
 ```
 
+### 13. Get Available Offline Download Tools
+
+```bash
+# List available offline download tools
+curl -X GET "${SERVER_URL}/api/fs/offline_download/tools" \
+  -H "Authorization: ${TOKEN}"
+
+# Response example:
+# {
+#   "code": 200,
+#   "data": ["aria2", "qBittorrent", "115 Cloud", "PikPak", "Thunder"]
+# }
+```
+
+### 14. Add Offline Download Task
+
+```bash
+# Add offline download task
+curl -X POST "${SERVER_URL}/api/fs/add_offline_download" \
+  -H "Authorization: ${TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "urls": ["http://example.com/file.zip", "magnet:?xt=..."],
+    "path": "/downloads",
+    "tool": "aria2",
+    "delete_policy": "delete_on_upload_succeed"
+  }'
+
+# Supported tools:
+# - aria2
+# - qBittorrent
+# - Transmission
+# - 115 Cloud
+# - 115 Open
+# - 123Pan
+# - 123 Open
+# - PikPak
+# - Thunder
+# - ThunderX
+# - ThunderBrowser
+
+# Delete policies:
+# - delete_on_upload_succeed (default)
+# - delete_on_upload_failed
+# - delete_never
+# - delete_always
+```
+
+### 15. List Offline Download Tasks
+
+```bash
+# List offline download tasks
+curl -X GET "${SERVER_URL}/api/fs/offline_download/list?page=1&per_page=10" \
+  -H "Authorization: ${TOKEN}"
+```
+
+### 16. Get Offline Download Task Info
+
+```bash
+# Get detailed task information
+curl -X GET "${SERVER_URL}/api/fs/offline_download/info?tid=<task_id>" \
+  -H "Authorization: ${TOKEN}"
+```
+
+### 17. Cancel Offline Download Task
+
+```bash
+# Cancel a running task
+curl -X POST "${SERVER_URL}/api/fs/offline_download/cancel?tid=<task_id>" \
+  -H "Authorization: ${TOKEN}"
+```
+
+### 18. Delete Offline Download Task
+
+```bash
+# Delete a task from the list
+curl -X POST "${SERVER_URL}/api/fs/offline_download/delete?tid=<task_id>" \
+  -H "Authorization: ${TOKEN}"
+```
+
 ## Workflow Example
 
 Here's a typical workflow for managing files:
@@ -264,6 +344,14 @@ curl -X PUT "${SERVER_URL}/api/fs/put" \
 - `POST /api/fs/move` - Move files
 - `PUT /api/fs/put` - Upload file
 - `POST /api/fs/form` - Upload file (form-data)
+
+### Offline Download Operations
+- `GET /api/fs/offline_download/tools` - List available download tools
+- `POST /api/fs/add_offline_download` - Add offline download task
+- `GET /api/fs/offline_download/list` - List offline download tasks
+- `GET /api/fs/offline_download/info` - Get task information
+- `POST /api/fs/offline_download/cancel` - Cancel a task
+- `POST /api/fs/offline_download/delete` - Delete a task
 
 ### Admin Operations
 - `GET /api/admin/storage/list` - List all storages

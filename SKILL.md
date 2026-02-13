@@ -1,28 +1,25 @@
+---
+name: openlist
+description: Manage files on OpenList servers using their REST API. Use this skill when users want to interact with OpenList file servers for (1) listing directories and files, (2) uploading or downloading files, (3) searching for files, (4) managing storages and folders (create, delete, rename, copy, move), (5) adding offline download tasks (aria2, qBittorrent, cloud services), or (6) querying task status. OpenList is a file list program that supports multiple storage providers including local storage, cloud drives (OneDrive, Google Drive, Aliyun), and network protocols (WebDAV, FTP, SFTP, S3).
+---
+
 # OpenList Skill
 
-**Use this skill when the user wants to:**
-- Manage files on an OpenList server
-- List directories and files
-- Upload, download, or delete files
-- Search for files
-- Manage storage providers
-- Configure OpenList settings
-
-## Overview
-
-OpenList is a file list program that supports multiple storage providers (local, OneDrive, Google Drive, Aliyun, etc.). This skill provides direct API access to OpenList servers.
+Interact with OpenList servers using their REST API for comprehensive file management and offline downloads.
 
 ## Prerequisites
 
-The user must provide:
+Users must provide:
 1. **OpenList Server URL** (e.g., `https://demo.oplist.org`)
-2. **Admin credentials** (username and password) for authenticated operations
+2. **Credentials** (username and password)
 
-Store these in `openlist-config.json` in the workspace root after first setup.
+Store these in `openlist-config.json` in the workspace root.
 
-## Configuration
+## Quick Start
 
-Create `openlist-config.json` in the workspace:
+### Configuration Setup
+
+Create `openlist-config.json`:
 
 ```json
 {
@@ -32,346 +29,162 @@ Create `openlist-config.json` in the workspace:
 }
 ```
 
-## Common Operations
+### Using the Helper Script
 
-### 1. Authentication
-
-OpenList uses JWT token authentication. All authenticated requests require a token obtained from login.
+The `scripts/openlist.sh` helper script provides convenient access to all OpenList operations:
 
 ```bash
-# Login and get token
-curl -X POST "${SERVER_URL}/api/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "admin",
-    "password": "password"
-  }'
+# Test connection
+scripts/openlist.sh login
 
-# Response:
-# {
-#   "code": 200,
-#   "message": "success",
-#   "data": {
-#     "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-#   }
-# }
+# List files
+scripts/openlist.sh list /
+
+# Upload file
+scripts/openlist.sh upload ./local.txt /remote.txt
+
+# Add offline download
+scripts/openlist.sh offline-download "http://example.com/file.zip" /downloads aria2
 ```
 
-### 2. List Files/Directories
+Run `scripts/openlist.sh` without arguments to see all available commands.
 
-```bash
-# List files in a directory
-curl -X POST "${SERVER_URL}/api/fs/list" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "path": "/",
-    "password": "",
-    "page": 1,
-    "per_page": 30,
-    "refresh": false
-  }'
-```
-
-### 3. Get File Info
-
-```bash
-# Get detailed file/directory information
-curl -X POST "${SERVER_URL}/api/fs/get" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "path": "/path/to/file.txt",
-    "password": ""
-  }'
-```
-
-### 4. Search Files
-
-```bash
-# Search for files
-curl -X POST "${SERVER_URL}/api/fs/search" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "parent": "/",
-    "keywords": "keyword",
-    "scope": 0,
-    "page": 1,
-    "per_page": 30
-  }'
-```
-
-### 5. Create Directory
-
-```bash
-# Create a new directory
-curl -X POST "${SERVER_URL}/api/fs/mkdir" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "path": "/new-folder"
-  }'
-```
-
-### 6. Rename File/Directory
-
-```bash
-# Rename file or directory
-curl -X POST "${SERVER_URL}/api/fs/rename" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "path": "/old-name.txt",
-    "name": "new-name.txt"
-  }'
-```
-
-### 7. Delete File/Directory
-
-```bash
-# Delete file or directory
-curl -X POST "${SERVER_URL}/api/fs/remove" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "names": ["file1.txt", "folder1"],
-    "dir": "/path/to/parent"
-  }'
-```
-
-### 8. Copy Files
-
-```bash
-# Copy files between paths
-curl -X POST "${SERVER_URL}/api/fs/copy" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "src_dir": "/source",
-    "dst_dir": "/destination",
-    "names": ["file1.txt", "file2.txt"]
-  }'
-```
-
-### 9. Move Files
-
-```bash
-# Move files between paths
-curl -X POST "${SERVER_URL}/api/fs/move" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "src_dir": "/source",
-    "dst_dir": "/destination",
-    "names": ["file1.txt", "file2.txt"]
-  }'
-```
-
-### 10. Upload File
-
-```bash
-# Upload a file (form-data)
-curl -X PUT "${SERVER_URL}/api/fs/put" \
-  -H "Authorization: ${TOKEN}" \
-  -H "File-Path: $(echo -n '/path/to/upload/file.txt' | base64 -w 0)" \
-  -H "Content-Type: application/octet-stream" \
-  --data-binary @local-file.txt
-```
-
-### 11. Get Storage List
-
-```bash
-# List all configured storages
-curl -X GET "${SERVER_URL}/api/admin/storage/list" \
-  -H "Authorization: ${TOKEN}"
-```
-
-### 12. Add Storage
-
-```bash
-# Add a new storage provider
-curl -X POST "${SERVER_URL}/api/admin/storage/create" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "mount_path": "/local",
-    "order": 0,
-    "driver": "Local",
-    "addition": "{\"root_folder_path\":\"/data\"}",
-    "remark": "Local storage",
-    "disabled": false,
-    "enable_sign": false,
-    "order_by": "name",
-    "order_direction": "asc"
-  }'
-```
-
-### 13. Get Available Offline Download Tools
-
-```bash
-# List available offline download tools
-curl -X GET "${SERVER_URL}/api/fs/offline_download/tools" \
-  -H "Authorization: ${TOKEN}"
-
-# Response example:
-# {
-#   "code": 200,
-#   "data": ["aria2", "qBittorrent", "115 Cloud", "PikPak", "Thunder"]
-# }
-```
-
-### 14. Add Offline Download Task
-
-```bash
-# Add offline download task
-curl -X POST "${SERVER_URL}/api/fs/add_offline_download" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "urls": ["http://example.com/file.zip", "magnet:?xt=..."],
-    "path": "/downloads",
-    "tool": "aria2",
-    "delete_policy": "delete_on_upload_succeed"
-  }'
-
-# Supported tools:
-# - aria2
-# - qBittorrent
-# - Transmission
-# - 115 Cloud
-# - 115 Open
-# - 123Pan
-# - 123 Open
-# - PikPak
-# - Thunder
-# - ThunderX
-# - ThunderBrowser
-
-# Delete policies:
-# - delete_on_upload_succeed (default)
-# - delete_on_upload_failed
-# - delete_never
-# - delete_always
-```
-
-### 15. List Offline Download Tasks
-
-```bash
-# List offline download tasks
-curl -X GET "${SERVER_URL}/api/fs/offline_download/list?page=1&per_page=10" \
-  -H "Authorization: ${TOKEN}"
-```
-
-### 16. Get Offline Download Task Info
-
-```bash
-# Get detailed task information
-curl -X GET "${SERVER_URL}/api/fs/offline_download/info?tid=<task_id>" \
-  -H "Authorization: ${TOKEN}"
-```
-
-### 17. Cancel Offline Download Task
-
-```bash
-# Cancel a running task
-curl -X POST "${SERVER_URL}/api/fs/offline_download/cancel?tid=<task_id>" \
-  -H "Authorization: ${TOKEN}"
-```
-
-### 18. Delete Offline Download Task
-
-```bash
-# Delete a task from the list
-curl -X POST "${SERVER_URL}/api/fs/offline_download/delete?tid=<task_id>" \
-  -H "Authorization: ${TOKEN}"
-```
-
-## Workflow Example
-
-Here's a typical workflow for managing files:
-
-```bash
-# 1. Load config
-SERVER_URL=$(jq -r '.server_url' openlist-config.json)
-USERNAME=$(jq -r '.username' openlist-config.json)
-PASSWORD=$(jq -r '.password' openlist-config.json)
-
-# 2. Login and get token
-TOKEN=$(curl -s -X POST "${SERVER_URL}/api/auth/login" \
-  -H "Content-Type: application/json" \
-  -d "{\"username\":\"${USERNAME}\",\"password\":\"${PASSWORD}\"}" \
-  | jq -r '.data.token')
-
-# 3. List root directory
-curl -s -X POST "${SERVER_URL}/api/fs/list" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"path":"/","page":1,"per_page":30}' \
-  | jq '.data.content[] | {name, size, is_dir, modified}'
-
-# 4. Create a directory
-curl -s -X POST "${SERVER_URL}/api/fs/mkdir" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"path":"/test-folder"}'
-
-# 5. Upload a file
-echo "Hello OpenList" > test.txt
-FILE_PATH_B64=$(echo -n '/test-folder/test.txt' | base64 -w 0)
-curl -X PUT "${SERVER_URL}/api/fs/put" \
-  -H "Authorization: ${TOKEN}" \
-  -H "File-Path: ${FILE_PATH_B64}" \
-  -H "Content-Type: application/octet-stream" \
-  --data-binary @test.txt
-```
-
-## API Endpoints Reference
+## Core Operations
 
 ### Authentication
-- `POST /api/auth/login` - Login and get JWT token
-- `POST /api/auth/2fa/generate` - Generate 2FA secret
-- `POST /api/auth/2fa/verify` - Verify 2FA code
+
+All operations require JWT token authentication. The helper script handles this automatically:
+
+```bash
+TOKEN=$(curl -s -X POST "${SERVER_URL}/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"password"}' \
+  | jq -r '.data.token')
+```
+
+Use the token in the `Authorization` header for all subsequent requests.
 
 ### File System Operations
-- `POST /api/fs/list` - List directory contents
-- `POST /api/fs/get` - Get file/directory info
-- `POST /api/fs/search` - Search files
-- `POST /api/fs/mkdir` - Create directory
-- `POST /api/fs/rename` - Rename file/directory
-- `POST /api/fs/remove` - Delete files/directories
-- `POST /api/fs/copy` - Copy files
-- `POST /api/fs/move` - Move files
-- `PUT /api/fs/put` - Upload file
-- `POST /api/fs/form` - Upload file (form-data)
 
-### Offline Download Operations
-- `GET /api/fs/offline_download/tools` - List available download tools
-- `POST /api/fs/add_offline_download` - Add offline download task
-- `GET /api/fs/offline_download/list` - List offline download tasks
-- `GET /api/fs/offline_download/info` - Get task information
-- `POST /api/fs/offline_download/cancel` - Cancel a task
-- `POST /api/fs/offline_download/delete` - Delete a task
+#### List Directory
+```bash
+scripts/openlist.sh list [path] [page] [per_page]
+```
 
-### Admin Operations
-- `GET /api/admin/storage/list` - List all storages
-- `POST /api/admin/storage/create` - Add storage
-- `POST /api/admin/storage/update` - Update storage
-- `POST /api/admin/storage/delete` - Delete storage
-- `GET /api/admin/user/list` - List users
-- `POST /api/admin/user/create` - Create user
-- `POST /api/admin/user/update` - Update user
-- `POST /api/admin/user/delete` - Delete user
-- `GET /api/admin/setting/list` - Get settings
-- `POST /api/admin/setting/save` - Save settings
+API: `POST /api/fs/list`
+- Path, pagination support (page, per_page)
+- Returns: file list with name, size, is_dir, modified time
 
-### Public Operations
-- `GET /api/public/settings` - Get public settings
-- `GET /api/public/ping` - Health check
+#### Search Files
+```bash
+scripts/openlist.sh search <keywords> [parent_path]
+```
 
-## Error Handling
+API: `POST /api/fs/search`
+- Keywords, parent path, scope (0=current, 1=recursive)
+- Pagination support
 
-OpenList API returns responses in this format:
+#### Create Directory
+```bash
+scripts/openlist.sh mkdir <path>
+```
+
+API: `POST /api/fs/mkdir`
+
+#### Upload File
+```bash
+scripts/openlist.sh upload <local_file> <remote_path>
+```
+
+API: `PUT /api/fs/put`
+- **Important**: Remote path must be base64-encoded in `File-Path` header
+- Content sent as `application/octet-stream`
+
+#### Delete Files
+```bash
+scripts/openlist.sh delete <name> <parent_dir>
+```
+
+API: `POST /api/fs/remove`
+- Supports deleting multiple files via `names` array
+
+#### Other Operations
+- **Rename**: `POST /api/fs/rename` - Change file/folder name
+- **Copy**: `POST /api/fs/copy` - Copy files between paths
+- **Move**: `POST /api/fs/move` - Move files between paths
+- **Get Info**: `POST /api/fs/get` - Get detailed file information
+
+### Offline Download
+
+OpenList supports offline downloads using various tools (aria2, qBittorrent, cloud services).
+
+#### List Available Tools
+```bash
+scripts/openlist.sh offline-tools
+```
+
+API: `GET /api/fs/offline_download/tools`
+
+Returns available download tools on the server.
+
+#### Add Download Task
+```bash
+scripts/openlist.sh offline-download <url> <path> [tool] [delete_policy]
+```
+
+API: `POST /api/fs/add_offline_download`
+
+Parameters:
+- `urls`: Array of download URLs (HTTP, magnet links, torrents)
+- `path`: Target directory path
+- `tool`: Download tool name (default: aria2)
+- `delete_policy`: When to delete source (default: delete_on_upload_succeed)
+
+Supported tools:
+- **Download clients**: aria2, qBittorrent, Transmission
+- **Cloud services**: 115 Cloud, 115 Open, 123Pan, 123 Open, PikPak
+- **Thunder series**: Thunder, ThunderX, ThunderBrowser
+
+Delete policies:
+- `delete_on_upload_succeed` - Delete after successful upload
+- `delete_on_upload_failed` - Delete after failed upload
+- `delete_never` - Never delete
+- `delete_always` - Always delete
+
+#### Manage Tasks
+```bash
+# List all tasks
+scripts/openlist.sh offline-list [page] [per_page]
+
+# Get task details
+scripts/openlist.sh offline-info <task_id>
+
+# Cancel running task
+scripts/openlist.sh offline-cancel <task_id>
+
+# Delete task record
+scripts/openlist.sh offline-delete <task_id>
+```
+
+APIs:
+- `GET /api/fs/offline_download/list` - List tasks with pagination
+- `GET /api/fs/offline_download/info?tid=<id>` - Get task details
+- `POST /api/fs/offline_download/cancel?tid=<id>` - Cancel task
+- `POST /api/fs/offline_download/delete?tid=<id>` - Delete task
+
+### Storage Management
+
+```bash
+scripts/openlist.sh storages
+```
+
+API: `GET /api/admin/storage/list`
+
+Lists all configured storage providers (requires admin permissions).
+
+## Response Format
+
+All OpenList API responses follow this structure:
 
 ```json
 {
@@ -381,38 +194,45 @@ OpenList API returns responses in this format:
 }
 ```
 
-Common error codes:
+Common status codes:
 - `200` - Success
 - `400` - Bad request (invalid parameters)
-- `401` - Unauthorized (invalid or missing token)
+- `401` - Unauthorized (invalid/missing token)
 - `403` - Forbidden (insufficient permissions)
 - `404` - Not found
 - `500` - Internal server error
 
-Always check the `code` field in responses and handle errors appropriately.
+## Important Implementation Details
 
-## Tips
+### Base64 Encoding for Uploads
+File paths for uploads must be base64-encoded:
+```bash
+FILE_PATH_B64=$(echo -n '/path/to/file.txt' | base64 -w 0)
+```
 
-1. **Token Expiration**: JWT tokens may expire. If you get 401 errors, re-authenticate to get a fresh token.
+### Token Expiration
+JWT tokens may expire. If you receive 401 errors, re-authenticate to get a fresh token.
 
-2. **Path Encoding**: For file uploads, the `File-Path` header must be base64-encoded.
+### Pagination
+Use `page` and `per_page` parameters for large directory listings to avoid performance issues.
 
-3. **Pagination**: Use `page` and `per_page` parameters for large directory listings.
+### Password-Protected Directories
+Include `"password": "..."` field in requests when accessing protected paths.
 
-4. **Password Protection**: Some directories may be password-protected. Include the `password` field in requests when accessing protected paths.
+## Additional Resources
 
-5. **Refresh**: Set `refresh: true` in list requests to force a refresh from the storage backend (may be slow).
+- **Complete API Reference**: See `references/API_REFERENCE.md` for detailed endpoint documentation with request/response examples
+- **Usage Examples**: See `references/EXAMPLES.md` for complete workflow examples including batch downloads, monitoring, and sync operations
+- **Installation Guide**: See `references/INSTALL.md` for setup instructions
+- **Quick Reference**: See `references/README.md` for command overview
+- **Test Script**: Run `scripts/test.sh` to validate the skill functionality
 
-## Documentation
-
-- API Documentation: https://fox.oplist.org
+### External Documentation
+- API Documentation: https://fox.oplist.org (interactive API docs)
 - Official Docs: https://doc.oplist.org
 - GitHub: https://github.com/OpenListTeam/OpenList
+- Demo Server: https://demo.oplist.org (guest/guest)
 
 ## License
 
-OpenList is licensed under AGPL-3.0. All API operations and code must comply with this license.
-
----
-
-**Remember**: Always load `openlist-config.json` before making API calls, and handle authentication tokens securely. Store tokens temporarily during the session and don't persist them in files.
+OpenList is licensed under AGPL-3.0. All API operations must comply with this license.

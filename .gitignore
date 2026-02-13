@@ -6,6 +6,9 @@ openlist-config.json
 # Reference materials (upstream repos)
 reference/
 
+# Claude Code settings
+.claude/
+
 # Test files
 /tmp/openclaw-test.txt
 

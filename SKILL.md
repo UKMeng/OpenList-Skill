@@ -49,6 +49,9 @@ python scripts/openlist.py list /
 # Upload file
 python scripts/openlist.py upload ./local.txt /remote.txt
 
+# Upload from URL
+python scripts/openlist.py upload-url "https://example.com/image.jpg" /remote-dir/
+
 # Add offline download
 python scripts/openlist.py offline-download "http://example.com/file.zip" /downloads aria2
 
@@ -103,6 +106,17 @@ API: `PUT /api/fs/put` (stream upload)
 - `--no-rapid`: skip hash computation (useful for very large files)
 - `--as-task`: run upload as a background task on the server
 - `--no-overwrite`: fail if file already exists
+
+#### Upload from URL
+```bash
+python scripts/openlist.py upload-url <url> <remote_dir> [--filename NAME] [--no-rapid] [--as-task] [--no-overwrite]
+```
+
+Downloads a file from a URL to a temp directory, then uploads it to the server.
+- Automatically adds `User-Agent` and `Referer` headers to bypass anti-hotlink protection
+- Filename is derived from the URL path; override with `--filename`
+- Temp files are cleaned up after upload
+- Supports the same `--no-rapid`, `--as-task`, `--no-overwrite` options as `upload`
 
 #### Delete Files
 ```bash

@@ -326,6 +326,92 @@ class OpenListClient:
             print(Colors.red(f"Request failed: {e}"), file=sys.stderr)
             sys.exit(1)
 
+    def rename(self, path: str, new_name: str) -> Dict:
+        """Rename a file or directory"""
+        print(Colors.yellow(f"Renaming: {path} -> {new_name}"))
+
+        try:
+            response = requests.post(
+                f"{self.server_url}/api/fs/rename",
+                headers=self._get_headers(),
+                json={
+                    "path": path,
+                    "name": new_name
+                },
+                timeout=30
+            )
+            data = response.json()
+
+            if data.get('code') == 200:
+                print(Colors.green("Renamed successfully!"))
+            else:
+                print(Colors.red("Rename failed"))
+                print(json.dumps(data, indent=2))
+
+            return data
+
+        except requests.RequestException as e:
+            print(Colors.red(f"Request failed: {e}"), file=sys.stderr)
+            sys.exit(1)
+
+    def move(self, src_dir: str, dst_dir: str, names: list) -> Dict:
+        """Move files or directories"""
+        print(Colors.yellow(f"Moving {names} from {src_dir} to {dst_dir}"))
+
+        try:
+            response = requests.post(
+                f"{self.server_url}/api/fs/move",
+                headers=self._get_headers(),
+                json={
+                    "src_dir": src_dir,
+                    "dst_dir": dst_dir,
+                    "names": names
+                },
+                timeout=30
+            )
+            data = response.json()
+
+            if data.get('code') == 200:
+                print(Colors.green("Moved successfully!"))
+            else:
+                print(Colors.red("Move failed"))
+                print(json.dumps(data, indent=2))
+
+            return data
+
+        except requests.RequestException as e:
+            print(Colors.red(f"Request failed: {e}"), file=sys.stderr)
+            sys.exit(1)
+
+    def copy(self, src_dir: str, dst_dir: str, names: list) -> Dict:
+        """Copy files or directories"""
+        print(Colors.yellow(f"Copying {names} from {src_dir} to {dst_dir}"))
+
+        try:
+            response = requests.post(
+                f"{self.server_url}/api/fs/copy",
+                headers=self._get_headers(),
+                json={
+                    "src_dir": src_dir,
+                    "dst_dir": dst_dir,
+                    "names": names
+                },
+                timeout=30
+            )
+            data = response.json()
+
+            if data.get('code') == 200:
+                print(Colors.green("Copied successfully!"))
+            else:
+                print(Colors.red("Copy failed"))
+                print(json.dumps(data, indent=2))
+
+            return data
+
+        except requests.RequestException as e:
+            print(Colors.red(f"Request failed: {e}"), file=sys.stderr)
+            sys.exit(1)
+
     def list_storages(self) -> Dict:
         """List configured storage providers"""
         print(Colors.yellow("Listing storages..."))
@@ -588,6 +674,23 @@ Environment variables:
     delete_parser.add_argument('name', help='File or directory name')
     delete_parser.add_argument('parent_dir', help='Parent directory path')
 
+    # Rename command
+    rename_parser = subparsers.add_parser('rename', help='Rename file or directory')
+    rename_parser.add_argument('path', help='Full path of the file/directory to rename')
+    rename_parser.add_argument('new_name', help='New name')
+
+    # Move command
+    move_parser = subparsers.add_parser('move', help='Move files or directories')
+    move_parser.add_argument('src_dir', help='Source directory path')
+    move_parser.add_argument('dst_dir', help='Destination directory path')
+    move_parser.add_argument('names', nargs='+', help='Names of files/directories to move')
+
+    # Copy command
+    copy_parser = subparsers.add_parser('copy', help='Copy files or directories')
+    copy_parser.add_argument('src_dir', help='Source directory path')
+    copy_parser.add_argument('dst_dir', help='Destination directory path')
+    copy_parser.add_argument('names', nargs='+', help='Names of files/directories to copy')
+
     # Storages command
     subparsers.add_parser('storages', help='List configured storages')
 
@@ -657,6 +760,12 @@ Environment variables:
             client.upload_file(args.local_file, args.remote_path)
         elif args.command == 'delete':
             client.delete(args.name, args.parent_dir)
+        elif args.command == 'rename':
+            client.rename(args.path, args.new_name)
+        elif args.command == 'move':
+            client.move(args.src_dir, args.dst_dir, args.names)
+        elif args.command == 'copy':
+            client.copy(args.src_dir, args.dst_dir, args.names)
         elif args.command == 'storages':
             client.list_storages()
         elif args.command == 'offline-tools':

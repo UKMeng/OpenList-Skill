@@ -114,10 +114,34 @@ python scripts/openlist.py info <path>
 
 API: `POST /api/fs/get`
 
-#### Other Operations
-- **Rename**: `POST /api/fs/rename`
-- **Copy**: `POST /api/fs/copy`
-- **Move**: `POST /api/fs/move`
+#### Rename File/Directory
+```bash
+python scripts/openlist.py rename <path> <new_name>
+```
+
+API: `POST /api/fs/rename`
+- `path`: full path of the file/directory to rename
+- `new_name`: new name (filename only, no path separators)
+
+#### Move Files/Directories
+```bash
+python scripts/openlist.py move <src_dir> <dst_dir> <name1> [name2 ...]
+```
+
+API: `POST /api/fs/move`
+- `src_dir`: source directory path
+- `dst_dir`: destination directory path
+- `names`: one or more file/directory names to move
+
+#### Copy Files/Directories
+```bash
+python scripts/openlist.py copy <src_dir> <dst_dir> <name1> [name2 ...]
+```
+
+API: `POST /api/fs/copy`
+- `src_dir`: source directory path
+- `dst_dir`: destination directory path
+- `names`: one or more file/directory names to copy
 
 ### Offline Download
 

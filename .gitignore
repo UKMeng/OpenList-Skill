@@ -1,27 +1,54 @@
-# OpenList Skill - .gitignore
-
-# Configuration files with credentials
+# OpenList config (contains credentials)
 openlist-config.json
 
-# Reference materials (upstream repos)
-reference/
-
-# Claude Code settings
-.claude/
-
-# Test files
-/tmp/openclaw-test.txt
-
-# Backup directories
-backup/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
 downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-# Log files
-*.log
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
 
-# Temporary files
-*.tmp
-*.temp
+# UV
+.uv/
+uv.lock
 
-# macOS
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# OS
 .DS_Store
+Thumbs.db

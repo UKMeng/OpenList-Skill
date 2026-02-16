@@ -1,513 +1,332 @@
 # OpenList API Examples
 
-This document provides practical examples of using the OpenList API through this skill.
+Practical examples of using the OpenList API via the `OpenListClient` Python class.
 
 ## Example 1: Complete File Management Workflow
 
-```bash
-#!/bin/bash
+```python
+from scripts.openlist import OpenListClient
 
-# Setup
-SERVER_URL=$(jq -r '.server_url' openlist-config.json)
-USERNAME=$(jq -r '.username' openlist-config.json)
-PASSWORD=$(jq -r '.password' openlist-config.json)
+client = OpenListClient(config_path='openlist-config.json')
 
 # 1. Login
-echo "=== Logging in ==="
-TOKEN=$(curl -s -X POST "${SERVER_URL}/api/auth/login" \
-  -H "Content-Type: application/json" \
-  -d "{\"username\":\"${USERNAME}\",\"password\":\"${PASSWORD}\"}" \
-  | jq -r '.data.token')
-
-echo "Token obtained: ${TOKEN:0:20}..."
+client.login()
 
 # 2. List root directory
-echo -e "\n=== Listing root directory ==="
-curl -s -X POST "${SERVER_URL}/api/fs/list" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"path":"/","page":1,"per_page":10}' \
-  | jq '.data.content[] | {name, is_dir, size, modified}'
+result = client.list_directory('/', page=1, per_page=10)
 
 # 3. Create a test directory
-echo -e "\n=== Creating test directory ==="
-curl -s -X POST "${SERVER_URL}/api/fs/mkdir" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"path":"/test-openclaw"}' \
-  | jq '.'
+client.mkdir('/test-openlist')
 
-# 4. Create a test file
-echo -e "\n=== Creating test file ==="
-echo "Hello from OpenClaw!" > /tmp/test-file.txt
+# 4. Upload a test file
+# First create a local file to upload
+with open('/tmp/test-file.txt', 'w') as f:
+    f.write('Hello from OpenList!')
 
-FILE_PATH_B64=$(echo -n '/test-openclaw/hello.txt' | base64 -w 0)
-curl -s -X PUT "${SERVER_URL}/api/fs/put" \
-  -H "Authorization: ${TOKEN}" \
-  -H "File-Path: ${FILE_PATH_B64}" \
-  -H "Content-Type: application/octet-stream" \
-  --data-binary @/tmp/test-file.txt \
-  | jq '.'
+client.upload_file('/tmp/test-file.txt', '/test-openlist/hello.txt')
 
 # 5. Verify the upload
-echo -e "\n=== Listing test directory ==="
-curl -s -X POST "${SERVER_URL}/api/fs/list" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"path":"/test-openclaw","page":1,"per_page":10}' \
-  | jq '.data.content[] | {name, size}'
+client.list_directory('/test-openlist', page=1, per_page=10)
 
 # 6. Get file info
-echo -e "\n=== Getting file info ==="
-curl -s -X POST "${SERVER_URL}/api/fs/get" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"path":"/test-openclaw/hello.txt"}' \
-  | jq '.data | {name, size, modified, sign}'
+client.get_info('/test-openlist/hello.txt')
 
-# 7. Rename the file
-echo -e "\n=== Renaming file ==="
-curl -s -X POST "${SERVER_URL}/api/fs/rename" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"path":"/test-openclaw/hello.txt","name":"greeting.txt"}' \
-  | jq '.'
+# 7. Search for the file
+client.search('hello', '/test-openlist')
 
-# 8. Copy file to another location
-echo -e "\n=== Copying file ==="
-curl -s -X POST "${SERVER_URL}/api/fs/copy" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"src_dir":"/test-openclaw","dst_dir":"/","names":["greeting.txt"]}' \
-  | jq '.'
-
-# 9. Search for the file
-echo -e "\n=== Searching for 'greeting' ==="
-curl -s -X POST "${SERVER_URL}/api/fs/search" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"parent":"/","keywords":"greeting","scope":0}' \
-  | jq '.data.content[] | {name, parent}'
-
-# 10. Clean up - delete test files
-echo -e "\n=== Cleaning up ==="
-curl -s -X POST "${SERVER_URL}/api/fs/remove" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"names":["test-openclaw"],"dir":"/"}' \
-  | jq '.'
-
-curl -s -X POST "${SERVER_URL}/api/fs/remove" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"names":["greeting.txt"],"dir":"/"}' \
-  | jq '.'
-
-echo -e "\n=== Done! ==="
+# 8. Clean up
+client.delete('hello.txt', '/test-openlist')
+client.delete('test-openlist', '/')
 ```
 
 ## Example 2: Backup Files from Server
 
-```bash
-#!/bin/bash
+```python
+import os
+import requests
+from scripts.openlist import OpenListClient
 
-# Download all files from a directory to local
+client = OpenListClient(config_path='openlist-config.json')
+client.login()
 
-SERVER_URL=$(jq -r '.server_url' openlist-config.json)
-USERNAME=$(jq -r '.username' openlist-config.json)
-PASSWORD=$(jq -r '.password' openlist-config.json)
-REMOTE_DIR="${1:-/documents}"
-LOCAL_DIR="${2:-./backup}"
+remote_dir = '/documents'
+local_dir = './backup'
+os.makedirs(local_dir, exist_ok=True)
 
-# Login
-TOKEN=$(curl -s -X POST "${SERVER_URL}/api/auth/login" \
-  -H "Content-Type: application/json" \
-  -d "{\"username\":\"${USERNAME}\",\"password\":\"${PASSWORD}\"}" \
-  | jq -r '.data.token')
+# List remote files
+result = client.list_directory(remote_dir, page=1, per_page=100)
+content = result.get('data', {}).get('content', [])
 
-# Create local directory
-mkdir -p "$LOCAL_DIR"
+for item in content:
+    if not item.get('is_dir'):
+        name = item['name']
+        print(f'Downloading: {name}')
 
-# List files
-FILES=$(curl -s -X POST "${SERVER_URL}/api/fs/list" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d "{\"path\":\"${REMOTE_DIR}\",\"page\":1,\"per_page\":100}" \
-  | jq -r '.data.content[] | select(.is_dir == false) | .name')
+        # Get download sign
+        info = client.get_info(f'{remote_dir}/{name}')
+        sign = info.get('data', {}).get('sign', '')
 
-# Download each file
-for file in $FILES; do
-  echo "Downloading: $file"
-  
-  # Get download URL
-  SIGN=$(curl -s -X POST "${SERVER_URL}/api/fs/get" \
-    -H "Authorization: ${TOKEN}" \
-    -H "Content-Type: application/json" \
-    -d "{\"path\":\"${REMOTE_DIR}/${file}\"}" \
-    | jq -r '.data.sign')
-  
-  # Download
-  curl -s "${SERVER_URL}/d${REMOTE_DIR}/${file}?sign=${SIGN}" \
-    -o "${LOCAL_DIR}/${file}"
-done
+        # Download via signed URL
+        url = f'{client.server_url}/d{remote_dir}/{name}?sign={sign}'
+        resp = requests.get(url, timeout=120)
+        with open(os.path.join(local_dir, name), 'wb') as f:
+            f.write(resp.content)
 
-echo "Backup complete! Files saved to: $LOCAL_DIR"
+print(f'Backup complete! Files saved to: {local_dir}')
 ```
 
 ## Example 3: Upload Directory to Server
 
-```bash
-#!/bin/bash
+```python
+import os
+from scripts.openlist import OpenListClient
 
-# Upload all files from a local directory to OpenList
+client = OpenListClient(config_path='openlist-config.json')
+client.login()
 
-SERVER_URL=$(jq -r '.server_url' openlist-config.json)
-USERNAME=$(jq -r '.username' openlist-config.json)
-PASSWORD=$(jq -r '.password' openlist-config.json)
-LOCAL_DIR="${1:-.}"
-REMOTE_DIR="${2:-/uploads}"
+local_dir = './my-files'
+remote_dir = '/uploads'
 
-# Login
-TOKEN=$(curl -s -X POST "${SERVER_URL}/api/auth/login" \
-  -H "Content-Type: application/json" \
-  -d "{\"username\":\"${USERNAME}\",\"password\":\"${PASSWORD}\"}" \
-  | jq -r '.data.token')
-
-# Create remote directory if needed
-curl -s -X POST "${SERVER_URL}/api/fs/mkdir" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d "{\"path\":\"${REMOTE_DIR}\"}" > /dev/null
+# Create remote directory
+client.mkdir(remote_dir)
 
 # Upload each file
-find "$LOCAL_DIR" -type f | while read -r file; do
-  filename=$(basename "$file")
-  echo "Uploading: $filename"
-  
-  FILE_PATH_B64=$(echo -n "${REMOTE_DIR}/${filename}" | base64 -w 0)
-  
-  curl -s -X PUT "${SERVER_URL}/api/fs/put" \
-    -H "Authorization: ${TOKEN}" \
-    -H "File-Path: ${FILE_PATH_B64}" \
-    -H "Content-Type: application/octet-stream" \
-    --data-binary "@${file}" \
-    | jq -r '.message'
-done
+for filename in os.listdir(local_dir):
+    filepath = os.path.join(local_dir, filename)
+    if os.path.isfile(filepath):
+        print(f'Uploading: {filename}')
+        client.upload_file(filepath, f'{remote_dir}/{filename}')
 
-echo "Upload complete!"
+print('Upload complete!')
 ```
 
 ## Example 4: Sync Files Between Two OpenList Servers
 
-```bash
-#!/bin/bash
+```python
+import os
+import requests
+from scripts.openlist import OpenListClient
 
-# Sync files from one OpenList server to another
+source = OpenListClient.__new__(OpenListClient)
+source.server_url = 'https://source.example.com'
+source.username = 'admin'
+source.password = 'password1'
+source.token = None
+source.config = {'server_url': source.server_url, 'username': source.username, 'password': source.password}
+source.login()
 
-SOURCE_SERVER="https://source.example.com"
-SOURCE_USER="admin"
-SOURCE_PASS="password1"
-SOURCE_PATH="/documents"
+dest = OpenListClient.__new__(OpenListClient)
+dest.server_url = 'https://dest.example.com'
+dest.username = 'admin'
+dest.password = 'password2'
+dest.token = None
+dest.config = {'server_url': dest.server_url, 'username': dest.username, 'password': dest.password}
+dest.login()
 
-DEST_SERVER="https://dest.example.com"
-DEST_USER="admin"
-DEST_PASS="password2"
-DEST_PATH="/backup"
-
-# Login to source
-SOURCE_TOKEN=$(curl -s -X POST "${SOURCE_SERVER}/api/auth/login" \
-  -H "Content-Type: application/json" \
-  -d "{\"username\":\"${SOURCE_USER}\",\"password\":\"${SOURCE_PASS}\"}" \
-  | jq -r '.data.token')
-
-# Login to destination
-DEST_TOKEN=$(curl -s -X POST "${DEST_SERVER}/api/auth/login" \
-  -H "Content-Type: application/json" \
-  -d "{\"username\":\"${DEST_USER}\",\"password\":\"${DEST_PASS}\"}" \
-  | jq -r '.data.token')
+source_path = '/documents'
+dest_path = '/backup'
 
 # Create destination directory
-curl -s -X POST "${DEST_SERVER}/api/fs/mkdir" \
-  -H "Authorization: ${DEST_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d "{\"path\":\"${DEST_PATH}\"}" > /dev/null
+dest.mkdir(dest_path)
 
 # List source files
-FILES=$(curl -s -X POST "${SOURCE_SERVER}/api/fs/list" \
-  -H "Authorization: ${SOURCE_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d "{\"path\":\"${SOURCE_PATH}\",\"page\":1,\"per_page\":100}" \
-  | jq -r '.data.content[] | select(.is_dir == false) | .name')
+result = source.list_directory(source_path, page=1, per_page=100)
+content = result.get('data', {}).get('content', [])
 
-# Sync each file
-for file in $FILES; do
-  echo "Syncing: $file"
-  
-  # Get source download URL
-  SIGN=$(curl -s -X POST "${SOURCE_SERVER}/api/fs/get" \
-    -H "Authorization: ${SOURCE_TOKEN}" \
-    -H "Content-Type: application/json" \
-    -d "{\"path\":\"${SOURCE_PATH}/${file}\"}" \
-    | jq -r '.data.sign')
-  
-  # Download from source and upload to destination
-  FILE_PATH_B64=$(echo -n "${DEST_PATH}/${file}" | base64 -w 0)
-  
-  curl -s "${SOURCE_SERVER}/d${SOURCE_PATH}/${file}?sign=${SIGN}" | \
-    curl -s -X PUT "${DEST_SERVER}/api/fs/put" \
-      -H "Authorization: ${DEST_TOKEN}" \
-      -H "File-Path: ${FILE_PATH_B64}" \
-      -H "Content-Type: application/octet-stream" \
-      --data-binary @- \
-      | jq -r '.message'
-done
+for item in content:
+    if not item.get('is_dir'):
+        name = item['name']
+        print(f'Syncing: {name}')
 
-echo "Sync complete!"
+        # Get download sign from source
+        info = source.get_info(f'{source_path}/{name}')
+        sign = info.get('data', {}).get('sign', '')
+
+        # Download from source to temp file
+        url = f'{source.server_url}/d{source_path}/{name}?sign={sign}'
+        resp = requests.get(url, timeout=120)
+        tmp = f'/tmp/sync_{name}'
+        with open(tmp, 'wb') as f:
+            f.write(resp.content)
+
+        # Upload to destination
+        dest.upload_file(tmp, f'{dest_path}/{name}')
+        os.remove(tmp)
+
+print('Sync complete!')
 ```
 
 ## Example 5: Monitor Directory Changes
 
-```bash
-#!/bin/bash
+```python
+import time
+import json
+from scripts.openlist import OpenListClient
 
-# Monitor a directory for changes and log them
+client = OpenListClient(config_path='openlist-config.json')
+client.login()
 
-SERVER_URL=$(jq -r '.server_url' openlist-config.json)
-USERNAME=$(jq -r '.username' openlist-config.json)
-PASSWORD=$(jq -r '.password' openlist-config.json)
-WATCH_DIR="${1:-/}"
+watch_dir = '/'
+previous_state = {}
 
-STATE_FILE="/tmp/openlist-monitor-state.json"
+# Get initial state
+result = client.list_directory(watch_dir, page=1, per_page=100)
+for item in result.get('data', {}).get('content', []):
+    previous_state[item['name']] = {
+        'size': item.get('size'),
+        'modified': item.get('modified')
+    }
 
-# Login
-get_token() {
-  curl -s -X POST "${SERVER_URL}/api/auth/login" \
-    -H "Content-Type: application/json" \
-    -d "{\"username\":\"${USERNAME}\",\"password\":\"${PASSWORD}\"}" \
-    | jq -r '.data.token'
-}
+print(f'Monitoring {watch_dir} for changes...')
 
-# Get current state
-get_state() {
-  local token="$1"
-  curl -s -X POST "${SERVER_URL}/api/fs/list" \
-    -H "Authorization: ${token}" \
-    -H "Content-Type: application/json" \
-    -d "{\"path\":\"${WATCH_DIR}\",\"page\":1,\"per_page\":100}" \
-    | jq '.data.content | map({name, size, modified}) | sort_by(.name)'
-}
+while True:
+    time.sleep(30)
+    client.login()  # Refresh token
 
-# Initialize
-TOKEN=$(get_token)
-echo "Starting monitor for: $WATCH_DIR"
-get_state "$TOKEN" > "$STATE_FILE"
+    result = client.list_directory(watch_dir, page=1, per_page=100)
+    current_state = {}
+    for item in result.get('data', {}).get('content', []):
+        current_state[item['name']] = {
+            'size': item.get('size'),
+            'modified': item.get('modified')
+        }
 
-# Monitor loop
-while true; do
-  sleep 30
-  
-  TOKEN=$(get_token)
-  CURRENT_STATE=$(get_state "$TOKEN")
-  
-  # Compare
-  DIFF=$(diff -u "$STATE_FILE" <(echo "$CURRENT_STATE"))
-  
-  if [ -n "$DIFF" ]; then
-    echo "=== Changes detected at $(date) ==="
-    echo "$DIFF"
-    echo "$CURRENT_STATE" > "$STATE_FILE"
-  fi
-done
+    # Detect added files
+    for name in current_state:
+        if name not in previous_state:
+            print(f'[ADDED] {name}')
+
+    # Detect removed files
+    for name in previous_state:
+        if name not in current_state:
+            print(f'[REMOVED] {name}')
+
+    # Detect modified files
+    for name in current_state:
+        if name in previous_state and current_state[name] != previous_state[name]:
+            print(f'[MODIFIED] {name}')
+
+    previous_state = current_state
 ```
 
 ## Example 6: Generate Storage Report
 
-```bash
-#!/bin/bash
+```python
+import json
+from scripts.openlist import OpenListClient
 
-# Generate a report of all files and storage usage
+client = OpenListClient(config_path='openlist-config.json')
+client.login()
 
-SERVER_URL=$(jq -r '.server_url' openlist-config.json)
-USERNAME=$(jq -r '.username' openlist-config.json)
-PASSWORD=$(jq -r '.password' openlist-config.json)
+print('=== OpenList Storage Report ===')
 
-# Login
-TOKEN=$(curl -s -X POST "${SERVER_URL}/api/auth/login" \
-  -H "Content-Type: application/json" \
-  -d "{\"username\":\"${USERNAME}\",\"password\":\"${PASSWORD}\"}" \
-  | jq -r '.data.token')
+# List storages (requires admin)
+storages_result = client.list_storages()
+storages = storages_result.get('data', {}).get('content', [])
 
-# Get storages
-echo "=== OpenList Storage Report ==="
-echo "Generated: $(date)"
-echo ""
+for storage in storages:
+    mount = storage.get('mount_path')
+    driver = storage.get('driver')
+    disabled = storage.get('disabled')
 
-STORAGES=$(curl -s -X GET "${SERVER_URL}/api/admin/storage/list" \
-  -H "Authorization: ${TOKEN}" \
-  | jq -r '.data.content[] | @json')
+    print(f'\nStorage: {mount}')
+    print(f'  Driver: {driver}')
+    print(f'  Status: {"Disabled" if disabled else "Enabled"}')
 
-echo "$STORAGES" | while read -r storage; do
-  MOUNT=$(echo "$storage" | jq -r '.mount_path')
-  DRIVER=$(echo "$storage" | jq -r '.driver')
-  DISABLED=$(echo "$storage" | jq -r '.disabled')
-  
-  echo "Storage: $MOUNT"
-  echo "Driver: $DRIVER"
-  echo "Status: $([ "$DISABLED" = "false" ] && echo "Enabled" || echo "Disabled")"
-  
-  # Count files and calculate total size
-  STATS=$(curl -s -X POST "${SERVER_URL}/api/fs/list" \
-    -H "Authorization: ${TOKEN}" \
-    -H "Content-Type: application/json" \
-    -d "{\"path\":\"${MOUNT}\",\"page\":1,\"per_page\":1000,\"refresh\":false}" \
-    | jq '.data.content | {
-      total: length,
-      files: map(select(.is_dir == false)) | length,
-      dirs: map(select(.is_dir == true)) | length,
-      size: map(select(.is_dir == false) | .size) | add
-    }')
-  
-  echo "$STATS" | jq -r '"  Total items: \(.total)\n  Files: \(.files)\n  Directories: \(.dirs)\n  Total size: \(.size) bytes"'
-  echo ""
-done
+    # Count files in this storage
+    listing = client.list_directory(mount, page=1, per_page=1000)
+    content = listing.get('data', {}).get('content', [])
 
-echo "=== End of Report ==="
+    files = [c for c in content if not c.get('is_dir')]
+    dirs = [c for c in content if c.get('is_dir')]
+    total_size = sum(f.get('size', 0) for f in files)
+
+    print(f'  Total items: {len(content)}')
+    print(f'  Files: {len(files)}')
+    print(f'  Directories: {len(dirs)}')
+    print(f'  Total size: {total_size} bytes')
+
+print('\n=== End of Report ===')
 ```
 
 ## Example 7: Offline Download with Aria2
 
-```bash
-#!/bin/bash
+```python
+import time
+from scripts.openlist import OpenListClient
 
-# Add offline download tasks and monitor progress
+client = OpenListClient(config_path='openlist-config.json')
+client.login()
 
-SERVER_URL=$(jq -r '.server_url' openlist-config.json)
-USERNAME=$(jq -r '.username' openlist-config.json)
-PASSWORD=$(jq -r '.password' openlist-config.json)
+# List available tools
+print('=== Available Offline Download Tools ===')
+client.get_offline_tools()
 
-# Login
-TOKEN=$(curl -s -X POST "${SERVER_URL}/api/auth/login" \
-  -H "Content-Type: application/json" \
-  -d "{\"username\":\"${USERNAME}\",\"password\":\"${PASSWORD}\"}" \
-  | jq -r '.data.token')
-
-echo "=== Available Offline Download Tools ==="
-curl -s -X GET "${SERVER_URL}/api/fs/offline_download/tools" \
-  -H "Authorization: ${TOKEN}" \
-  | jq -r '.data[]'
-
-echo -e "\n=== Adding Offline Download Task ==="
 # Add a download task
-DOWNLOAD_URL="http://example.com/file.zip"
-TARGET_PATH="/downloads"
-TOOL="aria2"
+print('\n=== Adding Offline Download Task ===')
+result = client.add_offline_download(
+    url='http://example.com/file.zip',
+    path='/downloads',
+    tool='aria2',
+    delete_policy='delete_on_upload_succeed'
+)
 
-TASK_RESPONSE=$(curl -s -X POST "${SERVER_URL}/api/fs/add_offline_download" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d "{\"urls\":[\"${DOWNLOAD_URL}\"],\"path\":\"${TARGET_PATH}\",\"tool\":\"${TOOL}\",\"delete_policy\":\"delete_on_upload_succeed\"}")
+tasks = result.get('data', {}).get('tasks', [])
+if tasks:
+    task_id = tasks[0].get('id')
+    print(f'Task ID: {task_id}')
 
-echo "$TASK_RESPONSE" | jq '.'
+    # Monitor task progress
+    print('\n=== Monitoring Task Progress ===')
+    while True:
+        info = client.get_offline_task(task_id)
+        state = info.get('data', {}).get('state', '')
+        progress = info.get('data', {}).get('progress', 0)
+        status = info.get('data', {}).get('status', '')
 
-TASK_ID=$(echo "$TASK_RESPONSE" | jq -r '.data.tasks[0].id')
+        print(f'State: {state} | Progress: {progress}% | Status: {status}')
 
-if [ "$TASK_ID" != "null" ]; then
-  echo -e "\nTask ID: $TASK_ID"
+        if state in ('succeeded', 'failed', 'canceled'):
+            print(f'\nTask finished with state: {state}')
+            break
 
-  # Monitor task progress
-  echo -e "\n=== Monitoring Task Progress ==="
-  while true; do
-    TASK_INFO=$(curl -s -X GET "${SERVER_URL}/api/fs/offline_download/info?tid=${TASK_ID}" \
-      -H "Authorization: ${TOKEN}")
-
-    STATE=$(echo "$TASK_INFO" | jq -r '.data.state')
-    PROGRESS=$(echo "$TASK_INFO" | jq -r '.data.progress')
-    STATUS=$(echo "$TASK_INFO" | jq -r '.data.status')
-
-    echo "[$(date '+%H:%M:%S')] State: $STATE | Progress: ${PROGRESS}% | Status: $STATUS"
-
-    # Check if task is done
-    if [ "$STATE" = "succeeded" ] || [ "$STATE" = "failed" ] || [ "$STATE" = "canceled" ]; then
-      echo -e "\nTask finished with state: $STATE"
-      break
-    fi
-
-    sleep 5
-  done
-
-  # Show final task info
-  echo -e "\n=== Final Task Info ==="
-  curl -s -X GET "${SERVER_URL}/api/fs/offline_download/info?tid=${TASK_ID}" \
-    -H "Authorization: ${TOKEN}" \
-    | jq '.data | {name, state, progress, total_bytes, error}'
-fi
+        time.sleep(5)
 ```
 
 ## Example 8: Batch Offline Download
 
-```bash
-#!/bin/bash
+```python
+from scripts.openlist import OpenListClient
 
-# Download multiple files using offline download
+client = OpenListClient(config_path='openlist-config.json')
+client.login()
 
-SERVER_URL=$(jq -r '.server_url' openlist-config.json)
-USERNAME=$(jq -r '.username' openlist-config.json)
-PASSWORD=$(jq -r '.password' openlist-config.json)
-
-# URLs to download (one per line)
-URLS=(
-  "http://example.com/file1.zip"
-  "http://example.com/file2.tar.gz"
-  "magnet:?xt=urn:btih:..."
-)
-
-TARGET_PATH="/batch-downloads"
-TOOL="aria2"
-
-# Login
-TOKEN=$(curl -s -X POST "${SERVER_URL}/api/auth/login" \
-  -H "Content-Type: application/json" \
-  -d "{\"username\":\"${USERNAME}\",\"password\":\"${PASSWORD}\"}" \
-  | jq -r '.data.token')
+urls = [
+    'http://example.com/file1.zip',
+    'http://example.com/file2.tar.gz',
+    'magnet:?xt=urn:btih:...',
+]
+target_path = '/batch-downloads'
+tool = 'aria2'
 
 # Create target directory
-curl -s -X POST "${SERVER_URL}/api/fs/mkdir" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d "{\"path\":\"${TARGET_PATH}\"}" > /dev/null
+client.mkdir(target_path)
 
-echo "=== Adding ${#URLS[@]} Download Tasks ==="
-
-# Build JSON array of URLs
-URLS_JSON=$(printf '%s\n' "${URLS[@]}" | jq -R . | jq -s .)
-
-# Add all downloads in one request
-RESPONSE=$(curl -s -X POST "${SERVER_URL}/api/fs/add_offline_download" \
-  -H "Authorization: ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d "{\"urls\":${URLS_JSON},\"path\":\"${TARGET_PATH}\",\"tool\":\"${TOOL}\"}")
-
-echo "$RESPONSE" | jq '.data.tasks[] | {id, name, state}'
+# Add each download task
+print(f'=== Adding {len(urls)} Download Tasks ===')
+for url in urls:
+    print(f'Adding: {url}')
+    client.add_offline_download(url=url, path=target_path, tool=tool)
 
 # List all tasks
-echo -e "\n=== All Offline Download Tasks ==="
-curl -s -X GET "${SERVER_URL}/api/fs/offline_download/list?page=1&per_page=50" \
-  -H "Authorization: ${TOKEN}" \
-  | jq '.data.content[] | {id, name, state, progress, error}'
+print('\n=== All Offline Download Tasks ===')
+client.list_offline_tasks(page=1, per_page=50)
 ```
 
-## Tips for Using These Examples
+## Tips
 
-1. **Save scripts**: Save these examples as `.sh` files and make them executable with `chmod +x`
-
-2. **Error handling**: Add proper error checking for production use
-
-3. **Token refresh**: For long-running scripts, implement token refresh logic
-
-4. **Rate limiting**: Be mindful of API rate limits and add delays between requests
-
-5. **Logging**: Add logging to track operations and debug issues
-
-6. **Backup before delete**: Always verify before running destructive operations
-
-7. **Test on demo**: Test scripts on the demo server first: https://demo.oplist.org
+1. **Config file**: All examples assume `openlist-config.json` exists in the working directory
+2. **Token refresh**: For long-running scripts, call `client.login()` periodically to refresh the token
+3. **Error handling**: The `OpenListClient` exits on fatal errors; wrap calls in try/except for custom handling
+4. **Test on demo**: Test against the demo server first: `https://demo.oplist.org` (guest/guest)
+5. **Pagination**: For large directories, iterate pages with `page` parameter

@@ -163,8 +163,7 @@ Content-Type: multipart/form-data
 
 ### List Available Tools
 ```bash
-GET /api/fs/offline_download/tools
-Authorization: <token>
+GET /api/public/offline_download_tools
 
 # Response:
 {
@@ -172,6 +171,8 @@ Authorization: <token>
   "data": ["aria2", "qBittorrent", "115 Cloud", "PikPak", ...]
 }
 ```
+
+Note: This is a public endpoint and does not require authentication.
 
 ### Add Offline Download Task
 ```bash
@@ -223,44 +224,46 @@ Delete policies:
 
 ### List Offline Download Tasks
 ```bash
-GET /api/fs/offline_download/list?page=1&per_page=10
+# Undone tasks (pending/running/errored)
+GET /api/task/offline_download/undone
+Authorization: <token>
+
+# Done tasks (succeeded/failed/canceled)
+GET /api/task/offline_download/done
 Authorization: <token>
 
 # Response:
 {
   "code": 200,
-  "data": {
-    "content": [
-      {
-        "id": "task_123",
-        "name": "file.zip",
-        "state": "running",
-        "status": "downloading",
-        "progress": 45.5,
-        "total_bytes": 1024000,
-        "error": null
-      }
-    ],
-    "total": 1
-  }
+  "data": [
+    {
+      "id": "task_123",
+      "name": "file.zip",
+      "state": 0,
+      "status": "downloading",
+      "progress": 45.5,
+      "total_bytes": 1024000,
+      "error": ""
+    }
+  ]
 }
 ```
 
 ### Get Task Info
 ```bash
-GET /api/fs/offline_download/info?tid=<task_id>
+POST /api/task/offline_download/info?tid=<task_id>
 Authorization: <token>
 ```
 
 ### Cancel Task
 ```bash
-POST /api/fs/offline_download/cancel?tid=<task_id>
+POST /api/task/offline_download/cancel?tid=<task_id>
 Authorization: <token>
 ```
 
 ### Delete Task
 ```bash
-POST /api/fs/offline_download/delete?tid=<task_id>
+POST /api/task/offline_download/delete?tid=<task_id>
 Authorization: <token>
 ```
 

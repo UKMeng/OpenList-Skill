@@ -1,5 +1,5 @@
 ---
-name: OpenList-Skill
+name: openlist
 description: Manage files on OpenList servers using their REST API. Use this skill when users want to interact with OpenList file servers for (1) listing directories and files, (2) uploading or downloading files, (3) searching for files, (4) managing storages and folders (create, delete, rename, copy, move), (5) adding offline download tasks (aria2, qBittorrent, cloud services), or (6) querying task status. OpenList is a file list program that supports multiple storage providers including local storage, cloud drives (OneDrive, Google Drive, Aliyun), and network protocols (WebDAV, FTP, SFTP, S3).
 ---
 
@@ -13,7 +13,15 @@ Users must provide:
 1. **OpenList Server URL** (e.g., `https://demo.oplist.org`)
 2. **Credentials** (username and password)
 
-Store these in `openlist-config.json` in the workspace root.
+Store these in `openlist-config.json` in the workspace root. A template is provided at `assets/openlist-config.template.json`.
+
+### System Dependencies
+
+- Python 3.6+
+- `requests` library:
+  ```bash
+  pip install requests
+  ```
 
 ## Quick Start
 
@@ -31,23 +39,22 @@ Create `openlist-config.json`:
 
 ### Using the Helper Script
 
-The `scripts/openlist.sh` helper script provides convenient access to all OpenList operations:
-
 ```bash
 # Test connection
-scripts/openlist.sh login
+python scripts/openlist.py login
 
 # List files
-scripts/openlist.sh list /
+python scripts/openlist.py list /
 
 # Upload file
-scripts/openlist.sh upload ./local.txt /remote.txt
+python scripts/openlist.py upload ./local.txt /remote.txt
 
 # Add offline download
-scripts/openlist.sh offline-download "http://example.com/file.zip" /downloads aria2
-```
+python scripts/openlist.py offline-download "http://example.com/file.zip" /downloads aria2
 
-Run `scripts/openlist.sh` without arguments to see all available commands.
+# Get help
+python scripts/openlist.py --help
+```
 
 ## Core Operations
 
@@ -56,63 +63,61 @@ Run `scripts/openlist.sh` without arguments to see all available commands.
 All operations require JWT token authentication. The helper script handles this automatically:
 
 ```bash
-TOKEN=$(curl -s -X POST "${SERVER_URL}/api/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"password"}' \
-  | jq -r '.data.token')
+python scripts/openlist.py login
 ```
 
-Use the token in the `Authorization` header for all subsequent requests.
+API: `POST /api/auth/login`
 
 ### File System Operations
 
 #### List Directory
 ```bash
-scripts/openlist.sh list [path] [page] [per_page]
+python scripts/openlist.py list [path] [--page N] [--per-page N]
 ```
 
 API: `POST /api/fs/list`
-- Path, pagination support (page, per_page)
 - Returns: file list with name, size, is_dir, modified time
 
 #### Search Files
 ```bash
-scripts/openlist.sh search <keywords> [parent_path]
+python scripts/openlist.py search <keywords> [parent_path]
 ```
 
 API: `POST /api/fs/search`
-- Keywords, parent path, scope (0=current, 1=recursive)
-- Pagination support
 
 #### Create Directory
 ```bash
-scripts/openlist.sh mkdir <path>
+python scripts/openlist.py mkdir <path>
 ```
 
 API: `POST /api/fs/mkdir`
 
 #### Upload File
 ```bash
-scripts/openlist.sh upload <local_file> <remote_path>
+python scripts/openlist.py upload <local_file> <remote_path>
 ```
 
 API: `PUT /api/fs/put`
-- **Important**: Remote path must be base64-encoded in `File-Path` header
-- Content sent as `application/octet-stream`
+- Remote path is base64-encoded in `File-Path` header (handled automatically)
 
 #### Delete Files
 ```bash
-scripts/openlist.sh delete <name> <parent_dir>
+python scripts/openlist.py delete <name> <parent_dir>
 ```
 
 API: `POST /api/fs/remove`
-- Supports deleting multiple files via `names` array
+
+#### Get File Info
+```bash
+python scripts/openlist.py info <path>
+```
+
+API: `POST /api/fs/get`
 
 #### Other Operations
-- **Rename**: `POST /api/fs/rename` - Change file/folder name
-- **Copy**: `POST /api/fs/copy` - Copy files between paths
-- **Move**: `POST /api/fs/move` - Move files between paths
-- **Get Info**: `POST /api/fs/get` - Get detailed file information
+- **Rename**: `POST /api/fs/rename`
+- **Copy**: `POST /api/fs/copy`
+- **Move**: `POST /api/fs/move`
 
 ### Offline Download
 
@@ -120,67 +125,44 @@ OpenList supports offline downloads using various tools (aria2, qBittorrent, clo
 
 #### List Available Tools
 ```bash
-scripts/openlist.sh offline-tools
+python scripts/openlist.py offline-tools
 ```
 
-API: `GET /api/fs/offline_download/tools`
-
-Returns available download tools on the server.
+API: `GET /api/public/offline_download_tools` (no auth required)
 
 #### Add Download Task
 ```bash
-scripts/openlist.sh offline-download <url> <path> [tool] [delete_policy]
+python scripts/openlist.py offline-download <url> <path> [tool] [delete_policy]
 ```
 
 API: `POST /api/fs/add_offline_download`
 
-Parameters:
-- `urls`: Array of download URLs (HTTP, magnet links, torrents)
-- `path`: Target directory path
-- `tool`: Download tool name (default: aria2)
-- `delete_policy`: When to delete source (default: delete_on_upload_succeed)
+Supported tools: aria2, qBittorrent, Transmission, 115 Cloud, 115 Open, 123Pan, 123 Open, PikPak, Thunder, ThunderX, ThunderBrowser
 
-Supported tools:
-- **Download clients**: aria2, qBittorrent, Transmission
-- **Cloud services**: 115 Cloud, 115 Open, 123Pan, 123 Open, PikPak
-- **Thunder series**: Thunder, ThunderX, ThunderBrowser
-
-Delete policies:
-- `delete_on_upload_succeed` - Delete after successful upload
-- `delete_on_upload_failed` - Delete after failed upload
-- `delete_never` - Never delete
-- `delete_always` - Always delete
+Delete policies: `delete_on_upload_succeed`, `delete_on_upload_failed`, `delete_never`, `delete_always`
 
 #### Manage Tasks
 ```bash
-# List all tasks
-scripts/openlist.sh offline-list [page] [per_page]
-
-# Get task details
-scripts/openlist.sh offline-info <task_id>
-
-# Cancel running task
-scripts/openlist.sh offline-cancel <task_id>
-
-# Delete task record
-scripts/openlist.sh offline-delete <task_id>
+python scripts/openlist.py offline-list [--page N] [--per-page N]
+python scripts/openlist.py offline-info <task_id>
+python scripts/openlist.py offline-cancel <task_id>
+python scripts/openlist.py offline-delete <task_id>
 ```
 
 APIs:
-- `GET /api/fs/offline_download/list` - List tasks with pagination
-- `GET /api/fs/offline_download/info?tid=<id>` - Get task details
-- `POST /api/fs/offline_download/cancel?tid=<id>` - Cancel task
-- `POST /api/fs/offline_download/delete?tid=<id>` - Delete task
+- `GET /api/task/offline_download/undone` - List pending/running tasks
+- `GET /api/task/offline_download/done` - List completed tasks
+- `POST /api/task/offline_download/info?tid=<id>` - Get task details
+- `POST /api/task/offline_download/cancel?tid=<id>` - Cancel task
+- `POST /api/task/offline_download/delete?tid=<id>` - Delete task
 
 ### Storage Management
 
 ```bash
-scripts/openlist.sh storages
+python scripts/openlist.py storages
 ```
 
-API: `GET /api/admin/storage/list`
-
-Lists all configured storage providers (requires admin permissions).
+API: `GET /api/admin/storage/list` (requires admin permissions)
 
 ## Response Format
 
@@ -194,45 +176,24 @@ All OpenList API responses follow this structure:
 }
 ```
 
-Common status codes:
-- `200` - Success
-- `400` - Bad request (invalid parameters)
-- `401` - Unauthorized (invalid/missing token)
-- `403` - Forbidden (insufficient permissions)
-- `404` - Not found
-- `500` - Internal server error
+Common status codes: `200` Success, `401` Unauthorized, `403` Forbidden, `404` Not found
 
-## Important Implementation Details
+## Important Notes
 
-### Base64 Encoding for Uploads
-File paths for uploads must be base64-encoded:
-```bash
-FILE_PATH_B64=$(echo -n '/path/to/file.txt' | base64 -w 0)
-```
-
-### Token Expiration
-JWT tokens may expire. If you receive 401 errors, re-authenticate to get a fresh token.
-
-### Pagination
-Use `page` and `per_page` parameters for large directory listings to avoid performance issues.
-
-### Password-Protected Directories
-Include `"password": "..."` field in requests when accessing protected paths.
+- **Base64 encoding**: Upload file paths are base64-encoded automatically by the client
+- **Token expiration**: Re-authenticate if you receive 401 errors
+- **Config sources**: file (`openlist-config.json`), CLI flag (`--config`), or env var (`OPENLIST_CONFIG`)
+- **Pagination**: Use `page` and `per_page` for large directory listings
+- **Password-protected paths**: Include `"password": "..."` in requests when needed
 
 ## Additional Resources
 
-- **Complete API Reference**: See `references/API_REFERENCE.md` for detailed endpoint documentation with request/response examples
-- **Usage Examples**: See `references/EXAMPLES.md` for complete workflow examples including batch downloads, monitoring, and sync operations
-- **Installation Guide**: See `references/INSTALL.md` for setup instructions
-- **Quick Reference**: See `references/README.md` for command overview
-- **Test Script**: Run `scripts/test.sh` to validate the skill functionality
+- **Complete API Reference**: See `references/API_REFERENCE.md`
+- **Usage Examples**: See `references/EXAMPLES.md` for workflow examples
+- **Test Script**: Run `python scripts/test.py` to validate functionality
 
 ### External Documentation
-- API Documentation: https://fox.oplist.org (interactive API docs)
+- API Documentation: https://fox.oplist.org
 - Official Docs: https://doc.oplist.org
 - GitHub: https://github.com/OpenListTeam/OpenList
 - Demo Server: https://demo.oplist.org (guest/guest)
-
-## License
-
-OpenList is licensed under AGPL-3.0. All API operations must comply with this license.

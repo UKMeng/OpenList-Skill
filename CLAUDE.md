@@ -8,7 +8,7 @@ This is a **skill development project** for creating an OpenList API integration
 
 **Status**: Under active development. Functionality is not yet fully validated.
 
-**Implementation**: Bash-based CLI tool that wraps OpenList REST API calls.
+**Implementation**: Python-based CLI tool that wraps OpenList REST API calls.
 
 ## Reference Materials
 
@@ -35,47 +35,50 @@ The `reference/` directory contains upstream source code and documentation:
 ```bash
 # Run full test suite (requires openlist-config.json)
 # WARNING: Tests create/delete temporary directories - ensure config points to test server
-./test.sh
+python3 scripts/test.py
 
 # Individual test of each function
-./openlist.sh login     # Verify authentication works
-./openlist.sh list /    # Test directory listing
-./openlist.sh storages  # Test admin API access
+python3 scripts/openlist.py login     # Verify authentication works
+python3 scripts/openlist.py list /    # Test directory listing
+python3 scripts/openlist.py storages  # Test admin API access
 ```
 
 ### Using the Helper Script
 ```bash
 # Test authentication
-./openlist.sh login
+python3 scripts/openlist.py login
 
 # List directory contents
-./openlist.sh list [path] [page] [per_page]
+python3 scripts/openlist.py list [path] [--page N] [--per-page N]
 
 # Search for files
-./openlist.sh search <keywords> [parent_path]
+python3 scripts/openlist.py search <keywords> [parent_path]
 
 # Create directory
-./openlist.sh mkdir <path>
+python3 scripts/openlist.py mkdir <path>
 
 # Upload file
-./openlist.sh upload <local_file> <remote_path>
+python3 scripts/openlist.py upload <local_file> <remote_path>
 
 # Delete file/directory
-./openlist.sh delete <name> <parent_dir>
+python3 scripts/openlist.py delete <name> <parent_dir>
 
 # List storage providers
-./openlist.sh storages
+python3 scripts/openlist.py storages
 
 # Get file info
-./openlist.sh info <path>
+python3 scripts/openlist.py info <path>
 
 # Offline download operations
-./openlist.sh offline-tools                                  # List available tools
-./openlist.sh offline-download <url> <path> [tool] [policy] # Add download task
-./openlist.sh offline-list [page] [per_page]                # List tasks
-./openlist.sh offline-info <task_id>                         # Get task info
-./openlist.sh offline-cancel <task_id>                       # Cancel task
-./openlist.sh offline-delete <task_id>                       # Delete task
+python3 scripts/openlist.py offline-tools                                          # List available tools
+python3 scripts/openlist.py offline-download <url> <path> [tool] [delete_policy]   # Add download task
+python3 scripts/openlist.py offline-list [--page N] [--per-page N]                 # List tasks
+python3 scripts/openlist.py offline-info <task_id>                                 # Get task info
+python3 scripts/openlist.py offline-cancel <task_id>                               # Cancel task
+python3 scripts/openlist.py offline-delete <task_id>                               # Delete task
+
+# View all commands
+python3 scripts/openlist.py --help
 ```
 
 ## Architecture
@@ -93,8 +96,9 @@ The `reference/` directory contains upstream source code and documentation:
 
 ### Configuration System
 - Configuration is stored in `openlist-config.json` (workspace root, not in repo)
-- Template provided as `openlist-config.template.json`
+- Template provided as `assets/openlist-config.template.json`
 - Config must contain: `server_url`, `username`, `password`
+- Config path can be overridden via `--config` flag or `OPENLIST_CONFIG` environment variable
 - Security: config file is gitignored to prevent credential leakage
 
 ### Authentication Flow
@@ -114,16 +118,17 @@ The `reference/` directory contains upstream source code and documentation:
 - Uses PUT to `/api/fs/put` endpoint
 - File path must be base64-encoded in `File-Path` header
 - Content sent as `application/octet-stream` in request body
-- Example: `echo -n '/path/file.txt' | base64 -w 0`
+- Python: `base64.b64encode(path.encode('utf-8')).decode('ascii')`
 
-### Helper Script Design (`openlist.sh`)
-- Single bash script with function-based command routing
+### Helper Script Design (`scripts/openlist.py`)
+- Python CLI tool using `argparse` for command routing
+- `OpenListClient` class provides all API operations
 - Color-coded output (RED/GREEN/YELLOW) for user feedback
 - Config validation before any operation
 - Automatic login token acquisition per operation
-- Uses `jq` for JSON parsing throughout
+- Uses `requests` library for HTTP communication
 
-### Test Script (`test.sh`)
+### Test Script (`scripts/test.py`)
 - Validates config existence and correctness
 - Runs sequential tests: login → list → search → mkdir → upload → verify → cleanup
 - Non-destructive: creates temporary test directory with timestamp
@@ -131,13 +136,12 @@ The `reference/` directory contains upstream source code and documentation:
 
 ## File Structure
 
-- **openlist.sh** - Main helper script (290 lines), provides CLI wrapper around API
-- **test.sh** - Test suite (132 lines), validates functionality end-to-end
-- **SKILL.md** - API reference documentation (330 lines), comprehensive endpoint guide
-- **EXAMPLES.md** - Usage examples (392 lines), 6 workflow examples including backup/sync/monitoring
-- **README.md** - User-facing quick start guide
-- **INSTALL.md** - Installation instructions for skill setup
-- **openlist-config.template.json** - Config template for users to copy
+- **scripts/openlist.py** - Main helper script, provides CLI wrapper around API
+- **scripts/test.py** - Test suite, validates functionality end-to-end
+- **SKILL.md** - API reference documentation, comprehensive endpoint guide
+- **references/EXAMPLES.md** - Usage examples, workflow examples including backup/sync/monitoring
+- **references/API_REFERENCE.md** - Detailed API endpoint documentation
+- **assets/openlist-config.template.json** - Config template for users to copy
 - **reference/** - Contains upstream OpenList source and docs (read-only reference)
 
 ## OpenList API Coverage
@@ -154,12 +158,13 @@ The `reference/` directory contains upstream source code and documentation:
 - Upload: PUT `/api/fs/put` (requires base64-encoded File-Path header)
 
 ### Offline Download Operations
-- List available tools: GET `/api/fs/offline_download/tools`
+- List available tools: GET `/api/public/offline_download_tools` (public, no auth)
 - Add download task: POST `/api/fs/add_offline_download`
-- List tasks: GET `/api/fs/offline_download/list` (with pagination)
-- Get task info: GET `/api/fs/offline_download/info?tid=<task_id>`
-- Cancel task: POST `/api/fs/offline_download/cancel?tid=<task_id>`
-- Delete task: POST `/api/fs/offline_download/delete?tid=<task_id>`
+- List undone tasks: GET `/api/task/offline_download/undone`
+- List done tasks: GET `/api/task/offline_download/done`
+- Get task info: POST `/api/task/offline_download/info?tid=<task_id>`
+- Cancel task: POST `/api/task/offline_download/cancel?tid=<task_id>`
+- Delete task: POST `/api/task/offline_download/delete?tid=<task_id>`
 
 ### Supported Download Tools
 - **aria2** - Aria2 download client
@@ -188,26 +193,25 @@ The `reference/` directory contains upstream source code and documentation:
 
 ### Base64 Encoding for File Paths
 When uploading files, the remote path must be base64-encoded:
-```bash
-FILE_PATH_B64=$(echo -n '/path/to/file.txt' | base64 -w 0)
-curl -H "File-Path: ${FILE_PATH_B64}" ...
+```python
+import base64
+file_path_b64 = base64.b64encode('/path/to/file.txt'.encode('utf-8')).decode('ascii')
 ```
-Note: Use `-w 0` flag to prevent line wrapping in base64 output.
 
 ### Error Response Handling
 Always check the `code` field in responses:
-```bash
-CODE=$(echo "$RESPONSE" | jq -r '.code')
-if [ "$CODE" != "200" ]; then
-  # Handle error
-fi
+```python
+data = response.json()
+if data.get('code') != 200:
+    # Handle error
+    print(data.get('message'))
 ```
 
 ### Token Management
 - Tokens expire after some time (server-configured)
-- Each helper script invocation gets a fresh token
+- Each script invocation gets a fresh token
 - No token persistence between runs
-- For long-running operations, implement token refresh logic
+- `OpenListClient` auto-acquires token on first API call
 
 ### Pagination
 List operations support pagination:
@@ -222,11 +226,8 @@ Some directories may require passwords:
 
 ## Dependencies
 
-Required system tools:
-- `bash` - Shell script execution
-- `curl` - HTTP API communication
-- `jq` - JSON parsing and manipulation
-- `base64` - File path encoding for uploads
+- Python 3.6+
+- `requests` library - Install with `pip install requests`
 
 ## Known Issues & TODOs
 
@@ -269,45 +270,44 @@ As this is a work-in-progress skill, be aware of:
 ### Finding API Specifications
 1. Check `reference/OpenList-Docs/pages/api/` for official API documentation
 2. Look at `reference/OpenList/server/` for Go backend implementation
-3. Reference examples in EXAMPLES.md for proven curl patterns
+3. Reference examples in references/EXAMPLES.md for proven patterns
 4. Test against demo server: https://demo.oplist.org (guest/guest)
 
 ### Adding New API Operations
 1. **Research**: Find endpoint in reference documentation
    - Check `reference/OpenList-Docs/pages/api/apidocs.md` for API doc links
    - Look for similar operations in `reference/OpenList/server/` Go code
-2. **Implement**: Add function to openlist.sh following existing patterns:
-   ```bash
-   operation_name() {
-       local param="$1"
-       TOKEN=$(login)
-       RESPONSE=$(curl -s -X POST "${SERVER_URL}/api/..." \
-           -H "Authorization: $TOKEN" \
-           -H "Content-Type: application/json" \
-           -d "{\"field\":\"${param}\"}")
-       CODE=$(echo "$RESPONSE" | jq -r '.code')
-       if [ "$CODE" = "200" ]; then
-           echo -e "${GREEN}Success${NC}"
-       else
-           echo -e "${RED}Failed${NC}"
-           echo "$RESPONSE" | jq '.'
-       fi
-   }
+2. **Implement**: Add method to `OpenListClient` in `scripts/openlist.py` following existing patterns:
+   ```python
+   def operation_name(self, param: str) -> Dict:
+       """Description of the operation"""
+       try:
+           response = requests.post(
+               f"{self.server_url}/api/...",
+               headers=self._get_headers(),
+               json={"field": param},
+               timeout=30
+           )
+           data = response.json()
+           if data.get('code') == 200:
+               print(Colors.green("Success"))
+           else:
+               print(Colors.red("Failed"))
+               print(json.dumps(data, indent=2))
+           return data
+       except requests.RequestException as e:
+           print(Colors.red(f"Request failed: {e}"), file=sys.stderr)
+           sys.exit(1)
    ```
-3. **Test**: Add test case to test.sh if operation modifies state
-4. **Document**: Update SKILL.md with endpoint details and examples
+3. **Add CLI subcommand**: Register the new command in the `main()` function's argparse setup
+4. **Test**: Add test case to `scripts/test.py` if operation modifies state
+5. **Document**: Update SKILL.md with endpoint details and examples
 
 ### Validating Existing Functionality
-- Compare bash implementation against Go source in `reference/OpenList/server/`
+- Compare Python implementation against Go source in `reference/OpenList/server/`
 - Check request/response formats match documentation
 - Test error cases (invalid paths, missing auth, wrong permissions)
 - Verify base64 encoding matches server expectations
-
-### Debugging API Calls
-Add `-v` flag to curl for verbose output:
-```bash
-curl -v -X POST "${SERVER_URL}/api/..." | jq '.'
-```
 
 ### Testing Against Demo Server
 Use demo server for testing without local OpenList installation:
@@ -333,22 +333,17 @@ find reference/OpenList-Docs/pages -name "*.md" -exec grep -l "api/fs/list" {} \
 
 **Test new endpoint manually**:
 ```bash
-# Use helper script login to get token
-TOKEN=$(./openlist.sh login)
-
-# Make raw API call
-curl -s -X POST "https://demo.oplist.org/api/fs/list" \
-  -H "Authorization: $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"path":"/","page":1,"per_page":10}' | jq '.'
+python3 scripts/openlist.py login
+# Then use the relevant command, e.g.:
+python3 scripts/openlist.py list / --page 1 --per-page 10
 ```
 
 **Check response format**:
-```bash
-# All responses follow this structure
+```json
+// All responses follow this structure
 {
-  "code": 200,           # HTTP-like status code
-  "message": "success",  # Human-readable message
-  "data": { ... }        # Actual response data
+  "code": 200,           // HTTP-like status code
+  "message": "success",  // Human-readable message
+  "data": { ... }        // Actual response data
 }
 ```

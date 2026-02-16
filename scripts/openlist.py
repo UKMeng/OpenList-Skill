@@ -9,8 +9,10 @@ import hashlib
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Optional, Dict, Any
+from urllib.parse import urlparse
 
 try:
     import requests
@@ -358,6 +360,74 @@ class OpenListClient:
         except requests.RequestException as e:
             print(Colors.red(f"Upload failed: {e}"), file=sys.stderr)
             sys.exit(1)
+
+    def upload_url(
+        self,
+        url: str,
+        remote_dir: str,
+        filename: Optional[str] = None,
+        rapid: bool = True,
+        as_task: bool = False,
+        overwrite: bool = True,
+    ) -> Dict:
+        """
+        Download a file from a URL to a temp directory, then upload it.
+
+        Args:
+            url:         URL to download from
+            remote_dir:  Remote destination directory
+            filename:    Override filename (default: derived from URL)
+            rapid:       Attempt rapid upload (秒传)
+            as_task:     Run upload as background task
+            overwrite:   Overwrite existing file
+        """
+        # Derive filename from URL if not provided
+        if not filename:
+            parsed = urlparse(url)
+            filename = os.path.basename(parsed.path)
+            if not filename:
+                filename = "downloaded_file"
+
+        print(Colors.yellow(f"Downloading {url} ..."))
+
+        try:
+            download_headers = {
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                              "AppleWebKit/537.36 (KHTML, like Gecko) "
+                              "Chrome/131.0.0.0 Safari/537.36",
+                "Referer": f"{urlparse(url).scheme}://{urlparse(url).netloc}/",
+            }
+            resp = requests.get(url, headers=download_headers, timeout=120, stream=True)
+            resp.raise_for_status()
+        except requests.RequestException as e:
+            print(Colors.red(f"Download failed: {e}"), file=sys.stderr)
+            sys.exit(1)
+
+        # Write to temp file
+        tmp_dir = tempfile.mkdtemp(prefix="openlist_upload_")
+        tmp_file = os.path.join(tmp_dir, filename)
+        try:
+            with open(tmp_file, 'wb') as f:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    f.write(chunk)
+
+            size = os.path.getsize(tmp_file)
+            print(Colors.green(f"Downloaded to temp: {tmp_file} ({size} bytes)"))
+
+            # Build remote path
+            remote_path = remote_dir.rstrip('/') + '/' + filename
+
+            # Upload
+            return self.upload_file(
+                tmp_file, remote_path,
+                rapid=rapid, as_task=as_task, overwrite=overwrite,
+            )
+        finally:
+            # Cleanup temp file
+            if os.path.exists(tmp_file):
+                os.remove(tmp_file)
+            if os.path.exists(tmp_dir):
+                os.rmdir(tmp_dir)
 
     def delete(self, name: str, parent_dir: str) -> Dict:
         """Delete a file or directory"""
@@ -742,6 +812,28 @@ Environment variables:
         help='Do not overwrite if file already exists'
     )
 
+    # Upload URL command
+    upload_url_parser = subparsers.add_parser(
+        'upload-url', help='Download from URL then upload to server'
+    )
+    upload_url_parser.add_argument('url', help='URL to download from')
+    upload_url_parser.add_argument('remote_dir', help='Remote destination directory')
+    upload_url_parser.add_argument(
+        '--filename', help='Override filename (default: derived from URL)'
+    )
+    upload_url_parser.add_argument(
+        '--no-rapid', action='store_true',
+        help='Disable rapid upload (skip hash computation)'
+    )
+    upload_url_parser.add_argument(
+        '--as-task', action='store_true',
+        help='Run upload as a background task on the server'
+    )
+    upload_url_parser.add_argument(
+        '--no-overwrite', action='store_true',
+        help='Do not overwrite if file already exists'
+    )
+
     # Delete command
     delete_parser = subparsers.add_parser('delete', help='Delete file or directory')
     delete_parser.add_argument('name', help='File or directory name')
@@ -832,6 +924,14 @@ Environment variables:
         elif args.command == 'upload':
             client.upload_file(
                 args.local_file, args.remote_path,
+                rapid=not args.no_rapid,
+                as_task=args.as_task,
+                overwrite=not args.no_overwrite,
+            )
+        elif args.command == 'upload-url':
+            client.upload_url(
+                args.url, args.remote_dir,
+                filename=args.filename,
                 rapid=not args.no_rapid,
                 as_task=args.as_task,
                 overwrite=not args.no_overwrite,

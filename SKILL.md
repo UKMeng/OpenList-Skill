@@ -94,11 +94,15 @@ API: `POST /api/fs/mkdir`
 
 #### Upload File
 ```bash
-python scripts/openlist.py upload <local_file> <remote_path>
+python scripts/openlist.py upload <local_file> <remote_path> [--no-rapid] [--as-task] [--no-overwrite]
 ```
 
-API: `PUT /api/fs/put`
-- Remote path is base64-encoded in `File-Path` header (handled automatically)
+API: `PUT /api/fs/put` (stream upload)
+- `File-Path` header is URL-encoded (handled automatically)
+- Default enables rapid upload (秒传): computes MD5/SHA1/SHA256 and sends via `X-File-*` headers
+- `--no-rapid`: skip hash computation (useful for very large files)
+- `--as-task`: run upload as a background task on the server
+- `--no-overwrite`: fail if file already exists
 
 #### Delete Files
 ```bash
@@ -204,7 +208,7 @@ Common status codes: `200` Success, `401` Unauthorized, `403` Forbidden, `404` N
 
 ## Important Notes
 
-- **Base64 encoding**: Upload file paths are base64-encoded automatically by the client
+- **Stream upload**: File paths are URL-encoded; file hashes are sent for rapid upload (秒传) by default
 - **Token expiration**: Re-authenticate if you receive 401 errors
 - **Config sources**: file (`openlist-config.json`), CLI flag (`--config`), or env var (`OPENLIST_CONFIG`)
 - **Pagination**: Use `page` and `per_page` for large directory listings

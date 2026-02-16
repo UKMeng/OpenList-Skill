@@ -5,7 +5,7 @@ Python-based CLI tool for interacting with OpenList servers
 """
 
 import argparse
-import base64
+import hashlib
 import json
 import os
 import sys
@@ -253,8 +253,44 @@ class OpenListClient:
             print(Colors.red(f"Request failed: {e}"), file=sys.stderr)
             sys.exit(1)
 
-    def upload_file(self, local_file: str, remote_path: str) -> Dict:
-        """Upload a file"""
+    @staticmethod
+    def _compute_hashes(file_path: Path) -> Dict[str, str]:
+        """Compute MD5, SHA1, SHA256 hashes for a file (used for rapid upload / 秒传)"""
+        md5 = hashlib.md5()
+        sha1 = hashlib.sha1()
+        sha256 = hashlib.sha256()
+        with open(file_path, 'rb') as f:
+            while True:
+                chunk = f.read(8192)
+                if not chunk:
+                    break
+                md5.update(chunk)
+                sha1.update(chunk)
+                sha256.update(chunk)
+        return {
+            "md5": md5.hexdigest(),
+            "sha1": sha1.hexdigest(),
+            "sha256": sha256.hexdigest(),
+        }
+
+    def upload_file(
+        self,
+        local_file: str,
+        remote_path: str,
+        rapid: bool = True,
+        as_task: bool = False,
+        overwrite: bool = True,
+    ) -> Dict:
+        """
+        Upload a file via stream (PUT /api/fs/put).
+
+        Args:
+            local_file:   Local file path
+            remote_path:  Remote destination path (including filename)
+            rapid:        Compute and send file hashes to attempt rapid upload (秒传)
+            as_task:      Run the upload as a background task on the server
+            overwrite:    Overwrite existing file (default True)
+        """
         local_path = Path(local_file)
 
         if not local_path.exists():
@@ -265,29 +301,54 @@ class OpenListClient:
             print(Colors.red(f"Error: Path is not a file: {local_file}"))
             sys.exit(1)
 
-        print(Colors.yellow(f"Uploading {local_file} to {remote_path}..."))
+        file_size = local_path.stat().st_size
+        print(Colors.yellow(f"Uploading {local_file} ({file_size} bytes) to {remote_path}..."))
 
-        # Encode remote path in base64
-        remote_path_b64 = base64.b64encode(remote_path.encode('utf-8')).decode('ascii')
+        # Ensure we have a token
+        if not self.token:
+            self.login()
+
+        # Build headers — File-Path is URL-encoded per the server implementation
+        from urllib.parse import quote
+        headers = {
+            "Authorization": self.token,
+            "File-Path": quote(remote_path, safe='/'),
+            "Content-Type": "application/octet-stream",
+            "Content-Length": str(file_size),
+            "Overwrite": "true" if overwrite else "false",
+        }
+
+        if as_task:
+            headers["As-Task"] = "true"
+
+        # Compute hashes for rapid upload (秒传)
+        if rapid:
+            print(Colors.yellow("Computing file hashes for rapid upload..."))
+            hashes = self._compute_hashes(local_path)
+            headers["X-File-Md5"] = hashes["md5"]
+            headers["X-File-Sha1"] = hashes["sha1"]
+            headers["X-File-Sha256"] = hashes["sha256"]
+            print(Colors.blue(f"  MD5:    {hashes['md5']}"))
+            print(Colors.blue(f"  SHA1:   {hashes['sha1']}"))
+            print(Colors.blue(f"  SHA256: {hashes['sha256']}"))
 
         try:
             with open(local_path, 'rb') as f:
-                headers = {
-                    "Authorization": self.token or self.login(),
-                    "File-Path": remote_path_b64,
-                    "Content-Type": "application/octet-stream"
-                }
-
                 response = requests.put(
                     f"{self.server_url}/api/fs/put",
                     headers=headers,
                     data=f,
-                    timeout=300  # 5 minutes for large files
+                    timeout=600,  # 10 minutes for large files
                 )
                 data = response.json()
 
                 if data.get('code') == 200:
-                    print(Colors.green("File uploaded successfully!"))
+                    task_info = data.get('data', {}).get('task') if data.get('data') else None
+                    if task_info:
+                        print(Colors.green("Upload task created!"))
+                        print(json.dumps(task_info, indent=2))
+                    else:
+                        print(Colors.green("File uploaded successfully!"))
                 else:
                     print(Colors.red("Upload failed"))
                     print(json.dumps(data, indent=2))
@@ -665,9 +726,21 @@ Environment variables:
     mkdir_parser.add_argument('path', help='Directory path to create')
 
     # Upload command
-    upload_parser = subparsers.add_parser('upload', help='Upload file')
+    upload_parser = subparsers.add_parser('upload', help='Upload file via stream')
     upload_parser.add_argument('local_file', help='Local file path')
     upload_parser.add_argument('remote_path', help='Remote file path')
+    upload_parser.add_argument(
+        '--no-rapid', action='store_true',
+        help='Disable rapid upload (skip hash computation)'
+    )
+    upload_parser.add_argument(
+        '--as-task', action='store_true',
+        help='Run upload as a background task on the server'
+    )
+    upload_parser.add_argument(
+        '--no-overwrite', action='store_true',
+        help='Do not overwrite if file already exists'
+    )
 
     # Delete command
     delete_parser = subparsers.add_parser('delete', help='Delete file or directory')
@@ -757,7 +830,12 @@ Environment variables:
         elif args.command == 'mkdir':
             client.mkdir(args.path)
         elif args.command == 'upload':
-            client.upload_file(args.local_file, args.remote_path)
+            client.upload_file(
+                args.local_file, args.remote_path,
+                rapid=not args.no_rapid,
+                as_task=args.as_task,
+                overwrite=not args.no_overwrite,
+            )
         elif args.command == 'delete':
             client.delete(args.name, args.parent_dir)
         elif args.command == 'rename':

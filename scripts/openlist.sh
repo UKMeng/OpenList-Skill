@@ -40,29 +40,29 @@ load_config() {
 # Login and get token
 login() {
     load_config
-    
-    echo -e "${YELLOW}Logging in to $SERVER_URL...${NC}"
-    
+
+    echo -e "${YELLOW}Logging in to $SERVER_URL...${NC}" >&2
+
     RESPONSE=$(curl -s -X POST "${SERVER_URL}/api/auth/login" \
         -H "Content-Type: application/json" \
         -d "{\"username\":\"${USERNAME}\",\"password\":\"${PASSWORD}\"}")
-    
+
     CODE=$(echo "$RESPONSE" | jq -r '.code')
-    
+
     if [ "$CODE" != "200" ]; then
-        echo -e "${RED}Login failed!${NC}"
-        echo "$RESPONSE" | jq '.'
+        echo -e "${RED}Login failed!${NC}" >&2
+        echo "$RESPONSE" | jq '.' >&2
         exit 1
     fi
-    
+
     TOKEN=$(echo "$RESPONSE" | jq -r '.data.token')
-    
+
     if [ "$TOKEN" = "null" ] || [ -z "$TOKEN" ]; then
-        echo -e "${RED}Failed to get token${NC}"
+        echo -e "${RED}Failed to get token${NC}" >&2
         exit 1
     fi
-    
-    echo -e "${GREEN}Login successful!${NC}"
+
+    echo -e "${GREEN}Login successful!${NC}" >&2
     echo "$TOKEN"
 }
 
@@ -71,11 +71,12 @@ list_dir() {
     local path="${1:-/}"
     local page="${2:-1}"
     local per_page="${3:-30}"
-    
+
     TOKEN=$(login)
-    
+    load_config
+
     echo -e "${YELLOW}Listing: $path${NC}"
-    
+
     curl -s -X POST "${SERVER_URL}/api/fs/list" \
         -H "Authorization: $TOKEN" \
         -H "Content-Type: application/json" \
@@ -86,14 +87,15 @@ list_dir() {
 # Get file info
 get_info() {
     local path="$1"
-    
+
     if [ -z "$path" ]; then
         echo -e "${RED}Error: Path is required${NC}"
         exit 1
     fi
-    
+
     TOKEN=$(login)
-    
+    load_config
+
     curl -s -X POST "${SERVER_URL}/api/fs/get" \
         -H "Authorization: $TOKEN" \
         -H "Content-Type: application/json" \
@@ -112,6 +114,7 @@ search() {
     fi
     
     TOKEN=$(login)
+    load_config
     
     echo -e "${YELLOW}Searching for: $keywords in $parent${NC}"
     
@@ -132,6 +135,7 @@ mkdir_remote() {
     fi
     
     TOKEN=$(login)
+    load_config
     
     echo -e "${YELLOW}Creating directory: $path${NC}"
     
@@ -167,6 +171,7 @@ upload_file() {
     fi
     
     TOKEN=$(login)
+    load_config
     
     FILE_PATH_B64=$(echo -n "$remote_path" | base64 -w 0)
     
@@ -200,6 +205,7 @@ delete_remote() {
     fi
     
     TOKEN=$(login)
+    load_config
     
     echo -e "${YELLOW}Deleting: $path in $dir${NC}"
     
@@ -221,6 +227,7 @@ delete_remote() {
 # List storages
 list_storages() {
     TOKEN=$(login)
+    load_config
 
     echo -e "${YELLOW}Listing storages...${NC}"
 
@@ -232,6 +239,7 @@ list_storages() {
 # Get available offline download tools
 get_offline_tools() {
     TOKEN=$(login)
+    load_config
 
     echo -e "${YELLOW}Getting available offline download tools...${NC}"
 
@@ -256,6 +264,7 @@ add_offline_download() {
     fi
 
     TOKEN=$(login)
+    load_config
 
     echo -e "${YELLOW}Adding offline download task...${NC}"
     echo "URL: $url"
@@ -285,6 +294,7 @@ list_offline_tasks() {
     local per_page="${2:-10}"
 
     TOKEN=$(login)
+    load_config
 
     echo -e "${YELLOW}Listing offline download tasks...${NC}"
 
@@ -303,6 +313,7 @@ get_offline_task() {
     fi
 
     TOKEN=$(login)
+    load_config
 
     curl -s -X GET "${SERVER_URL}/api/fs/offline_download/info?tid=${task_id}" \
         -H "Authorization: $TOKEN" \
@@ -319,6 +330,7 @@ cancel_offline_task() {
     fi
 
     TOKEN=$(login)
+    load_config
 
     echo -e "${YELLOW}Canceling task: $task_id${NC}"
 
@@ -345,6 +357,7 @@ delete_offline_task() {
     fi
 
     TOKEN=$(login)
+    load_config
 
     echo -e "${YELLOW}Deleting task: $task_id${NC}"
 

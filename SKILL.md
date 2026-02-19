@@ -13,7 +13,7 @@ Users must provide:
 1. **OpenList Server URL** (e.g., `https://demo.oplist.org`)
 2. **Authentication** — either a permanent token or username+password credentials
 
-Store these in `openlist-config.json` in the workspace root. A template is provided at `assets/openlist-config.template.json`.
+Store these in `openlist-config.json` in the skill folder (same directory as this SKILL.md). A template is provided at `assets/openlist-config.template.json`.
 
 ### System Dependencies
 

@@ -1,6 +1,6 @@
 {
   "server_url": "https://your-openlist-server.com",
+  "token": "openlist-",
   "username": "admin",
-  "password": "your-password",
-  "comment": "Copy this file to your workspace root as 'openlist-config.json' and fill in your server details"
+  "password": "your-password"
 }

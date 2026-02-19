@@ -62,9 +62,9 @@ class OpenListClient:
         )
         self.config = self._load_config()
         self.server_url = self.config['server_url'].rstrip('/')
-        self.username = self.config['username']
-        self.password = self.config['password']
-        self.token: Optional[str] = None
+        self.username = self.config.get('username', '')
+        self.password = self.config.get('password', '')
+        self.token: Optional[str] = self.config.get('token')
 
     def _load_config(self) -> Dict[str, Any]:
         """Load configuration from file"""
@@ -85,11 +85,15 @@ class OpenListClient:
             sys.exit(1)
 
         # Validate required fields
-        required_fields = ['server_url', 'username', 'password']
-        for field in required_fields:
-            if field not in config or not config[field]:
-                print(Colors.red(f"Error: Missing required field '{field}' in config"))
-                sys.exit(1)
+        if 'server_url' not in config or not config['server_url']:
+            print(Colors.red("Error: Missing required field 'server_url' in config"))
+            sys.exit(1)
+        # Either token or username+password must be provided
+        has_token = config.get('token')
+        has_credentials = config.get('username') and config.get('password')
+        if not has_token and not has_credentials:
+            print(Colors.red("Error: Config must have either 'token' or 'username'+'password'"))
+            sys.exit(1)
 
         return config
 

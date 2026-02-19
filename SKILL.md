@@ -11,7 +11,7 @@ Interact with OpenList servers using their REST API for comprehensive file manag
 
 Users must provide:
 1. **OpenList Server URL** (e.g., `https://demo.oplist.org`)
-2. **Credentials** (username and password)
+2. **Authentication** — either a permanent token or username+password credentials
 
 Store these in `openlist-config.json` in the workspace root. A template is provided at `assets/openlist-config.template.json`.
 
@@ -27,11 +27,33 @@ Store these in `openlist-config.json` in the workspace root. A template is provi
 
 ### Configuration Setup
 
-Create `openlist-config.json`:
+Create `openlist-config.json` (choose one of the following):
+
+**Option 1: Permanent Token (recommended)**
 
 ```json
 {
   "server_url": "https://your-openlist-server.com",
+  "token": "openlist-xxxx-your-permanent-token"
+}
+```
+
+**Option 2: Username + Password**
+
+```json
+{
+  "server_url": "https://your-openlist-server.com",
+  "username": "admin",
+  "password": "your-password"
+}
+```
+
+**Option 3: Both (token preferred, credentials as fallback)**
+
+```json
+{
+  "server_url": "https://your-openlist-server.com",
+  "token": "openlist-xxxx-your-permanent-token",
   "username": "admin",
   "password": "your-password"
 }
@@ -63,9 +85,13 @@ python scripts/openlist.py --help
 
 ### Authentication
 
-All operations require JWT token authentication. The helper script handles this automatically:
+The helper script supports two authentication methods:
+
+1. **Permanent token** — If `token` is set in config, it is used directly (no login request needed, faster and saves API calls)
+2. **Username + password** — Falls back to `POST /api/auth/login` to obtain a JWT token
 
 ```bash
+# Test authentication (only needed for username+password mode)
 python scripts/openlist.py login
 ```
 
@@ -223,8 +249,8 @@ Common status codes: `200` Success, `401` Unauthorized, `403` Forbidden, `404` N
 ## Important Notes
 
 - **Stream upload**: File paths are URL-encoded; file hashes are sent for rapid upload (秒传) by default
-- **Token expiration**: Re-authenticate if you receive 401 errors
-- **Config sources**: file (`openlist-config.json`), CLI flag (`--config`), or env var (`OPENLIST_CONFIG`)
+- **Token expiration**: Permanent tokens don't expire; JWT tokens from login may expire — re-authenticate if you receive 401 errors
+- **Config sources**: file (`openlist-config.json`), CLI flag (`--config`), or env var (`OPENLIST_CONFIG`); config requires either `token` or `username`+`password`
 - **Pagination**: Use `page` and `per_page` for large directory listings
 - **Password-protected paths**: Include `"password": "..."` in requests when needed
 
